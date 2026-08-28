@@ -1,0 +1,19 @@
+# XcodeGen fallback: if ABPlot.xcodeproj fails to open in your Xcode,
+# run `brew install xcodegen && xcodegen` in the repo root to regenerate it.
+name: ABPlot
+options:
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  ABPlot:
+    type: application
+    platform: iOS
+    sources: [ABPlot]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.abplot
+        INFOPLIST_FILE: Config/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: 1
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
