@@ -1,0 +1,511 @@
+/* ABPlot web — a two-pane editor: canvas on the left, measurements on the right. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-sunken: #f7f7fa;
+  --border: #d8d8de;
+  --text: #1c1c1e;
+  --text-dim: #6c6c72;
+  --accent: #0a84ff;
+  --accent-text: #ffffff;
+  --a: #34c759;
+  --b: #ff3b30;
+  --selected: #ff9f0a;
+  --grid: #d3d3da;
+  --grid-axis: #b0b0ba;
+  --danger: #d70015;
+  --radius: 10px;
+  --panel-width: 26rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-sunken: #2c2c2e;
+    --border: #3a3a3c;
+    --text: #f2f2f7;
+    --text-dim: #98989f;
+    --grid: #2f2f33;
+    --grid-axis: #48484a;
+    --danger: #ff453a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.brand p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.app-bar-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--panel-width);
+}
+
+/* ---------------------------------------------------------------- canvas */
+
+.canvas-wrap {
+  position: relative;
+  min-width: 0;
+  background: var(--surface);
+}
+
+#canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.grid-line {
+  stroke: var(--grid);
+  fill: none;
+}
+
+.grid-axis {
+  stroke: var(--grid-axis);
+}
+
+.baseline {
+  stroke: var(--text-dim);
+  fill: none;
+}
+
+.baseline-label {
+  fill: var(--text-dim);
+}
+
+.point {
+  cursor: grab;
+}
+
+.point-dot {
+  fill: var(--accent);
+}
+
+.point-ring {
+  fill: none;
+  stroke: var(--surface);
+}
+
+.point.selected .point-ring {
+  stroke: var(--selected);
+}
+
+.point-label {
+  fill: var(--accent-text);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.handle {
+  cursor: grab;
+}
+
+.handle-A .handle-dot {
+  fill: var(--a);
+}
+
+.handle-B .handle-dot {
+  fill: var(--b);
+}
+
+.handle-ring {
+  fill: none;
+  stroke: var(--surface);
+}
+
+.handle-label {
+  fill: #ffffff;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.canvas-overlay {
+  position: absolute;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.canvas-overlay > * {
+  pointer-events: auto;
+}
+
+.canvas-overlay-bottom-left {
+  left: 0.9rem;
+  bottom: 0.9rem;
+}
+
+.canvas-overlay-bottom-right {
+  right: 0.9rem;
+  bottom: 0.9rem;
+}
+
+.scale-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.scale-bar-rule {
+  height: 8px;
+  border: 1px solid var(--text-dim);
+  border-top: none;
+  min-width: 12px;
+}
+
+.readout {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  min-height: 1.2em;
+}
+
+.zoom-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.zoom-buttons button {
+  width: 2rem;
+  padding: 0.25rem 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.empty-hint {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.empty-hint[hidden] {
+  display: none;
+}
+
+/* ----------------------------------------------------------------- panel */
+
+.panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border-left: 1px solid var(--border);
+  overflow: auto;
+}
+
+.panel-section {
+  background: var(--surface);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.panel-grow {
+  flex: 1 1 auto;
+}
+
+.panel-section h2 {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-row label {
+  flex: 1;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.note code {
+  font-size: 0.95em;
+}
+
+.status {
+  margin: 0;
+  font-size: 0.75rem;
+  min-height: 1.2em;
+}
+
+.status[data-tone="error"] {
+  color: var(--danger);
+}
+
+.status[data-tone="ok"] {
+  color: var(--text-dim);
+}
+
+.help {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+kbd {
+  font: inherit;
+  font-size: 0.95em;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 0.25em;
+}
+
+.button-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+/* ----------------------------------------------------------- measurements */
+
+.table-scroll {
+  min-height: 0;
+  /* Tall enough for a real plot, capped so the file and help sections stay
+     reachable without hunting; the panel itself scrolls beyond that. */
+  max-height: 26rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 0.35rem 0.35rem;
+  white-space: nowrap;
+}
+
+thead th:first-child {
+  text-align: left;
+}
+
+tbody td {
+  padding: 0.25rem 0.35rem;
+  text-align: right;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  white-space: nowrap;
+}
+
+tbody td:first-child {
+  text-align: left;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+tbody tr[aria-selected="true"] {
+  background: color-mix(in srgb, var(--selected) 22%, transparent);
+}
+
+.label-input {
+  width: 2.9rem;
+  padding: 0.1rem 0.3rem;
+  font: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: inherit;
+}
+
+.label-input:hover,
+.label-input:focus {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.row-delete {
+  padding: 0.05rem 0.4rem;
+  line-height: 1.2;
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------- controls */
+
+button,
+input,
+select {
+  font: inherit;
+  color: var(--text);
+}
+
+button {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+input[type="number"],
+select {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.28rem 0.45rem;
+}
+
+input[type="number"] {
+  width: 6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+tbody tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(16rem, 1fr) auto;
+  }
+
+  .panel {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .panel-grow {
+    min-height: 0;
+  }
+
+  .table-scroll {
+    max-height: 18rem;
+  }
+}

@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import {
+  abDistanceMeters,
+  createPoint,
+  defaultDocument,
+  newId,
+  nextLabel,
+  parseDocument,
+  serializeDocument,
+  toWireFormat,
+} from '../src/plotDocument.js';
+
+/** Exactly what the iOS app writes to `plot.json` (CGPoint encodes as [x, y]). */
+const iosFile = `{
+  "pointA": [100, 400],
+  "pointB": [300, 400],
+  "abDistance": 2.5,
+  "unit": "feet",
+  "points": [
+    { "id": "8F3B0C1E-1111-4222-8333-444455556666", "position": [200, 300], "label": "1" },
+    { "id": "8F3B0C1E-1111-4222-8333-444455556667", "position": [250, 355.5], "label": "2" }
+  ]
+}`;
+
+describe('parseDocument', () => {
+  it('reads the iOS wire format', () => {
+    const doc = parseDocument(iosFile);
+    assert.deepEqual(doc.pointA, { x: 100, y: 400 });
+    assert.deepEqual(doc.pointB, { x: 300, y: 400 });
+    assert.equal(doc.abDistance, 2.5);
+    assert.equal(doc.unit, 'feet');
+    assert.equal(doc.points.length, 2);
+    assert.deepEqual(doc.points[1].position, { x: 250, y: 355.5 });
+    assert.equal(doc.points[0].id, '8F3B0C1E-1111-4222-8333-444455556666');
+  });
+
+  it('also accepts points written as {x, y} objects', () => {
+    const doc = parseDocument({
+      pointA: { x: 1, y: 2 },
+      pointB: { x: 3, y: 4 },
+      abDistance: 1,
+      unit: 'meters',
+      points: [{ position: { x: 5, y: 6 } }],
+    });
+    assert.deepEqual(doc.pointA, { x: 1, y: 2 });
+    assert.deepEqual(doc.points[0].position, { x: 5, y: 6 });
+  });
+
+  it('fills in the parts a hand-written file may omit', () => {
+    const doc = parseDocument({ pointA: [0, 0], pointB: [10, 0], abDistance: 3 });
+    assert.equal(doc.unit, 'meters');
+    assert.deepEqual(doc.points, []);
+
+    const labelled = parseDocument({ pointA: [0, 0], pointB: [10, 0], abDistance: 3, points: [{ position: [1, 1] }] });
+    assert.equal(labelled.points[0].label, '1');
+    assert.match(labelled.points[0].id, /^[0-9A-F-]{36}$/);
+  });
+
+  it('accepts an unscaled plot, since the iOS app can save one', () => {
+    assert.equal(parseDocument({ pointA: [0, 0], pointB: [10, 0], abDistance: 0 }).abDistance, 0);
+  });
+
+  it('rejects what it cannot honestly interpret', () => {
+    const cases = [
+      ['not json at all', /Not valid JSON/],
+      ['[1, 2, 3]', /Expected a JSON object/],
+      [{ pointA: [0, 0], pointB: [1, 0], abDistance: 1, unit: 'cubits' }, /Unknown unit/],
+      [{ pointA: [0, 0], pointB: [1, 0], abDistance: -4 }, /non-negative/],
+      [{ pointA: [0, 0], pointB: [1, 0], abDistance: 'far' }, /non-negative/],
+      [{ pointA: [0, 0], abDistance: 1 }, /pointB must be/],
+      [{ pointA: ['a', 'b'], pointB: [1, 0], abDistance: 1 }, /pointA must be/],
+      [{ pointA: [0, 0], pointB: [1, 0], abDistance: 1, points: {} }, /points must be an array/],
+      [{ pointA: [0, 0], pointB: [1, 0], abDistance: 1, points: [{ position: [0] }] }, /points\[0\]\.position/],
+    ];
+    for (const [input, message] of cases) {
+      assert.throws(() => parseDocument(input), message, `should have rejected ${JSON.stringify(input)}`);
+    }
+  });
+
+  it('copies rather than aliases its input', () => {
+    const raw = { pointA: [0, 0], pointB: [10, 0], abDistance: 1, points: [{ position: [2, 2], label: 'x' }] };
+    const doc = parseDocument(raw);
+    doc.points[0].position.x = 99;
+    doc.pointA.x = 99;
+    assert.deepEqual(raw.points[0].position, [2, 2]);
+    assert.deepEqual(raw.pointA, [0, 0]);
+  });
+});
+
+describe('serializeDocument', () => {
+  it('writes CGPoints as arrays, the way Foundation decodes them', () => {
+    const wire = JSON.parse(serializeDocument(parseDocument(iosFile)));
+    assert.deepEqual(wire.pointA, [100, 400]);
+    assert.deepEqual(wire.points[0].position, [200, 300]);
+    assert.equal(wire.unit, 'feet');
+  });
+
+  it('keeps each coordinate pair on one line', () => {
+    const text = serializeDocument(parseDocument(iosFile));
+    assert.match(text, /"pointA": \[100, 400\]/);
+    assert.match(text, /"position": \[250, 355\.5\]/);
+    assert.deepEqual(JSON.parse(text).points[1].position, [250, 355.5], 'still valid JSON');
+  });
+
+  it('can write without pretty-printing', () => {
+    const text = serializeDocument(parseDocument(iosFile), { pretty: false });
+    assert.doesNotMatch(text, /\n/);
+    assert.deepEqual(JSON.parse(text).pointB, [300, 400]);
+  });
+
+  it('round-trips an iOS file unchanged', () => {
+    const once = parseDocument(iosFile);
+    const twice = parseDocument(serializeDocument(once));
+    assert.deepEqual(twice, once);
+    assert.deepEqual(toWireFormat(twice), JSON.parse(iosFile));
+  });
+});
+
+describe('labels and ids', () => {
+  it('numbers new points above the highest number already used', () => {
+    assert.equal(nextLabel([]), '1');
+    assert.equal(nextLabel([{ label: '1' }, { label: '7' }, { label: '3' }]), '8');
+    assert.equal(nextLabel([{ label: 'porch' }, { label: '2' }]), '3');
+  });
+
+  it('creates points with a fresh uppercase UUID', () => {
+    const point = createPoint({ x: 5, y: 6 }, []);
+    assert.deepEqual(point.position, { x: 5, y: 6 });
+    assert.equal(point.label, '1');
+    assert.match(point.id, /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/);
+    assert.notEqual(newId(), newId());
+  });
+});
+
+describe('abDistanceMeters', () => {
+  it('converts feet to meters', () => {
+    assert.equal(abDistanceMeters({ ...defaultDocument(), abDistance: 10, unit: 'feet' }), 3.048);
+    assert.equal(abDistanceMeters({ ...defaultDocument(), abDistance: 10, unit: 'meters' }), 10);
+  });
+});

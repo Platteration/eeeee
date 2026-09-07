@@ -19,7 +19,13 @@ iOS 16+, iPhone only.
   This distance defines the scale of the whole plot.
 - The plot autosaves and is restored on relaunch.
 
-### 2. AR mode
+### 2. Moving plots on and off the phone
+The app keeps its plot in `plot.json` in its Documents folder, which is exposed
+to the Files app (under *On My iPhone → ABPlot*). Copy that file out to keep or
+share a plot, or drop one in — replacing `plot.json` and relaunching the app
+loads it. The web companion in `web/` reads and writes exactly this file.
+
+### 3. AR mode
 - Tap **View in AR** (enabled once you have at least one point and a valid
   distance).
 - Scan a flat horizontal surface until the coaching overlay dismisses.
@@ -34,6 +40,18 @@ off; the HUD reports the discrepancy between your tapped span and the
 declared distance (e.g. "tapped span 3.00 m vs declared 4.00 m (−25%)") so
 you can judge placement accuracy. If the rendered B marker isn't exactly
 where you tapped, that's this feedback, not a bug.
+
+## Web companion
+
+`web/` holds a browser version of the plot editor: the same A–B geometry, the
+same `plot.json`, plus the measurement table, printable plans and CSV export
+that a mouse and a big screen make easy. It has no AR mode — draw and check the
+plot there, export the JSON, and open it here to place it. See
+[`web/README.md`](web/README.md).
+
+```sh
+cd web && npm start   # http://localhost:8000, no dependencies to install
+```
 
 ## Building
 
@@ -55,6 +73,7 @@ reference it in that folder's `Contents.json`.
 ## Project layout
 
 ```
+web/                    Browser companion app (see web/README.md)
 ABPlot.xcodeproj/       Xcode 16 project (filesystem-synchronized group)
 Config/Info.plist       App Info.plist (camera usage, ARKit requirement)
 project.yml             XcodeGen fallback spec
