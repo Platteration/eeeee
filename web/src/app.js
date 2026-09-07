@@ -6,8 +6,14 @@
 import { Store } from './store.js';
 import { PlotEditor } from './editor.js';
 import { defaultDocument, parseDocument, UNITS } from './plotDocument.js';
-import { isMeasurable, measurePoints, metersPerCanvasUnit, plotExtent } from './measurements.js';
-import { formatLength, formatSigned } from './format.js';
+import {
+  isMeasurable,
+  measurePoints,
+  metersPerCanvasUnit,
+  plotExtent,
+  positionForOffsets,
+} from './measurements.js';
+import { formatLength, formatSigned, toMeters } from './format.js';
 import { canvasABLength } from './plotMath.js';
 import { downloadCsv, downloadJson, downloadPng, downloadSvg } from './exporters.js';
 
@@ -99,12 +105,21 @@ function renderScale(doc) {
  */
 function columnsFor(selected) {
   const columns = [
-    { key: 'along', head: 'Along', signed: true, title: 'Distance along the A→B baseline' },
+    {
+      key: 'along',
+      head: 'Along',
+      signed: true,
+      editable: true,
+      title: 'Distance along the A→B baseline — type to place the point exactly',
+    },
     {
       key: 'perp',
       head: 'Perp.',
       signed: true,
-      title: 'Distance perpendicular to the baseline; positive is the canvas-down side',
+      editable: true,
+      title:
+        'Distance perpendicular to the baseline, positive on the canvas-down side — ' +
+        'type to place the point exactly',
     },
     { key: 'fromA', head: 'From A', title: 'Straight-line distance from A' },
     { key: 'fromB', head: 'From B', title: 'Straight-line distance from B' },
@@ -139,10 +154,81 @@ function renderHead(columns) {
   ui.tableHead.replaceChildren(tr);
 }
 
+/**
+ * Which cell the user is in, so a re-render can put them back. Every edit
+ * rebuilds the table, and typing into an element that is about to be replaced
+ * would otherwise drop focus mid-keystroke.
+ */
+function captureTableFocus() {
+  const active = document.activeElement;
+  if (!active || !ui.tableBody.contains(active) || !active.dataset.row) return null;
+  return {
+    row: active.dataset.row,
+    column: active.dataset.column,
+    start: active.selectionStart,
+    end: active.selectionEnd,
+  };
+}
+
+function restoreTableFocus(focus) {
+  if (!focus) return;
+  const input = ui.tableBody.querySelector(
+    `[data-row="${CSS.escape(focus.row)}"][data-column="${CSS.escape(focus.column)}"]`,
+  );
+  if (!input) return;
+  input.focus();
+  if (focus.start !== null) input.setSelectionRange(focus.start, focus.end);
+}
+
+/** An editable measurement cell: type a distance, the point moves there. */
+function measureInput(row, column, text) {
+  const input = document.createElement('input');
+  input.className = 'measure-input';
+  input.dataset.row = row.id;
+  input.dataset.column = column.key;
+  input.value = text;
+  input.inputMode = 'decimal';
+  input.setAttribute('aria-label', `${column.head} for point ${row.label}`);
+  input.addEventListener('change', () => {
+    const entered = input.value.trim();
+    const typed = Number(entered);
+    if (entered === '' || !Number.isFinite(typed)) {
+      // Put the old value back rather than moving the point somewhere arbitrary.
+      input.value = text;
+      setStatus(`“${entered}” is not a distance.`, 'error');
+      return;
+    }
+    moveTo(row, column.key, typed);
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') input.blur();
+    if (event.key === 'Escape') {
+      input.value = text;
+      input.blur();
+    }
+    event.stopPropagation();
+  });
+  return input;
+}
+
+/** Move a point so that its `along` or `perp` reads `value` in the doc's unit. */
+function moveTo(row, key, value) {
+  const doc = store.document;
+  const offsets = { along: row.along, perp: row.perp, [key]: toMeters(value, doc.unit) };
+  const position = positionForOffsets(doc, offsets);
+  if (!position) return;
+  store.apply((draft) => {
+    const point = draft.points.find((p) => p.id === row.id);
+    if (point) point.position = position;
+  });
+}
+
 function renderTable(doc) {
   const selected = store.selectedPoint;
   const rows = measurePoints(doc, selected ? selected.position : null);
   const columns = columnsFor(selected);
+  const measurable = isMeasurable(doc);
+  const focus = captureTableFocus();
   renderHead(columns);
 
   const fragment = document.createDocumentFragment();
@@ -155,6 +241,8 @@ function renderTable(doc) {
     const labelCell = document.createElement('td');
     const input = document.createElement('input');
     input.className = 'label-input';
+    input.dataset.row = row.id;
+    input.dataset.column = 'label';
     input.value = row.label;
     input.setAttribute('aria-label', `Label for point ${row.label}`);
     // 'change' (not 'input') so re-rendering never yanks the caret mid-typing.
@@ -175,9 +263,15 @@ function renderTable(doc) {
     for (const column of columns) {
       const td = document.createElement('td');
       const value = row[column.key];
-      td.textContent = column.signed
+      const text = column.signed
         ? formatSigned(value, doc.unit, { withUnit: false })
         : formatLength(value, doc.unit, { withUnit: false });
+      // `along` and `perp` together *are* the point's position, so they can be
+      // typed as well as read: enter what the tape says and the point moves
+      // there. The derived distances stay read-only -- no single one of them
+      // determines where a point is.
+      if (column.editable && measurable) td.append(measureInput(row, column, text));
+      else td.textContent = text;
       tr.append(td);
     }
 
@@ -195,7 +289,11 @@ function renderTable(doc) {
     actions.append(remove);
     tr.append(actions);
 
-    tr.addEventListener('click', () => store.select(row.id === store.selectedId ? null : row.id));
+    tr.addEventListener('click', (event) => {
+      // Clicking into a cell's input is editing, not selecting.
+      if (event.target.closest('input, button')) return;
+      store.select(row.id === store.selectedId ? null : row.id);
+    });
     tr.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -206,6 +304,7 @@ function renderTable(doc) {
   }
 
   ui.tableBody.replaceChildren(fragment);
+  restoreTableFocus(focus);
   ui.pointsEmpty.hidden = rows.length > 0;
   ui.emptyHint.hidden = rows.length > 0;
 

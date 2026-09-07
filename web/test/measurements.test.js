@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { distanceMeters, isMeasurable, measurePoints, metersPerCanvasUnit, plotExtent } from '../src/measurements.js';
+import {
+  distanceMeters,
+  isMeasurable,
+  measurePoints,
+  metersPerCanvasUnit,
+  plotExtent,
+  positionForOffsets,
+} from '../src/measurements.js';
 
 /** The PlotMath.swift worked example: A-B is 4 m, one point above the baseline. */
 const doc = {
@@ -83,5 +90,33 @@ describe('plotExtent', () => {
   it('is null when there is nothing to measure', () => {
     assert.equal(plotExtent({ ...doc, points: [] }), null);
     assert.equal(plotExtent({ ...doc, abDistance: 0 }), null);
+  });
+});
+
+describe('positionForOffsets', () => {
+  it('is the exact inverse of the along/perp a row reports', () => {
+    for (const original of [{ x: 200, y: 200 }, { x: -40, y: 610 }, { x: 300, y: 300 }]) {
+      const one = { ...doc, points: [{ id: 'p', label: '1', position: original }] };
+      const [row] = measurePoints(one);
+      const back = positionForOffsets(one, { along: row.along, perp: row.perp });
+      close(back.x, original.x, 1e-9);
+      close(back.y, original.y, 1e-9);
+    }
+  });
+
+  it('places a point by tape measurements alone', () => {
+    // 3 m along the baseline from A, 1 m below it: 200 units per 4 m.
+    assert.deepEqual(positionForOffsets(doc, { along: 3, perp: 1 }), { x: 250, y: 350 });
+  });
+
+  it('works the same on a rotated baseline', () => {
+    const rotated = { ...doc, pointB: { x: 100, y: 500 } }; // A->B points down the canvas
+    const at = positionForOffsets(rotated, { along: 4, perp: 0 });
+    close(at.x, rotated.pointB.x, 1e-9);
+    close(at.y, rotated.pointB.y, 1e-9);
+  });
+
+  it('declines without a scale', () => {
+    assert.equal(positionForOffsets({ ...doc, abDistance: 0 }, { along: 1, perp: 1 }), null);
   });
 });

@@ -33,12 +33,24 @@ npm test           # the whole suite, no install required
 | Add a point | Click empty canvas |
 | Select / deselect | Click a point, or a row in the table |
 | Move | Drag a point, or the green **A** / red **B** handle; arrow keys nudge the selection (<kbd>Shift</kbd> for ten pixels at a time) |
+| Place exactly | Type into a point's **Along** or **Perp.** cell — see below |
 | Delete | <kbd>Delete</kbd>, or the ✕ in its row |
 | Pan | Drag the background, the middle button, or <kbd>Shift</kbd>-drag |
 | Zoom | Scroll, pinch, the ± buttons; **Fit** (<kbd>F</kbd>) frames everything |
 | Undo / redo | <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> — a whole drag undoes as one step |
 
 The plot autosaves to `localStorage`, so a reload picks up where you left off.
+
+### Measuring, both ways
+
+The table reads the sketch, and the sketch reads the table: **Along** and
+**Perp.** are editable. Together they *are* the point's position, so typing a
+distance moves the point exactly there — click roughly where a feature sits,
+then enter what the tape actually said. The derived columns stay read-only; no
+single distance from A pins a point down.
+
+Entering a value on an unscaled plot is impossible rather than wrong: without a
+declared A–B distance those cells are plain text.
 
 ### Scale
 

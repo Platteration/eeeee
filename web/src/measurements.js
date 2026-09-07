@@ -7,7 +7,7 @@
  * whole plot as a table of real distances, before you ever stand in the room.
  */
 
-import { abCoordinates, canvasABLength, hasValidBaseline, worldOffset } from './plotMath.js';
+import { abCoordinates, canvasABLength, canvasPoint, hasValidBaseline, worldOffset } from './plotMath.js';
 import { abDistanceMeters } from './plotDocument.js';
 
 /** Whether the document has enough information for real-world measurements. */
@@ -80,6 +80,20 @@ export function measurePoints(doc, reference = null) {
           : Math.hypot(point.position.x - reference.x, point.position.y - reference.y) * scale,
     };
   });
+}
+
+/**
+ * The canvas position for a point sitting `along` meters down the baseline from
+ * A and `perp` meters across it -- the exact inverse of the `along` and `perp`
+ * a row reports, so a distance read off a tape can be entered as a number
+ * instead of aimed at with the mouse.
+ *
+ * Returns null when the plot has no scale to place it against.
+ */
+export function positionForOffsets(doc, { along, perp }) {
+  if (!isMeasurable(doc)) return null;
+  const abMeters = abDistanceMeters(doc);
+  return canvasPoint({ s: along / abMeters, t: perp / abMeters }, doc.pointA, doc.pointB);
 }
 
 /**

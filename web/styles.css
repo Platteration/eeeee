@@ -401,8 +401,8 @@ tbody tr[aria-selected="true"] {
   background: color-mix(in srgb, var(--selected) 22%, transparent);
 }
 
-.label-input {
-  width: 2.9rem;
+.label-input,
+.measure-input {
   padding: 0.1rem 0.3rem;
   font: inherit;
   background: transparent;
@@ -411,8 +411,23 @@ tbody tr[aria-selected="true"] {
   color: inherit;
 }
 
+.label-input {
+  width: 2.9rem;
+}
+
+/* Right-aligned like the read-only measurements it sits among, so a column of
+   numbers still reads as a column. */
+.measure-input {
+  width: 100%;
+  min-width: 2.6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .label-input:hover,
-.label-input:focus {
+.label-input:focus,
+.measure-input:hover,
+.measure-input:focus {
   border-color: var(--border);
   background: var(--surface);
 }
