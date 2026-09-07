@@ -5,7 +5,7 @@
 
 import { Store } from './store.js';
 import { PlotEditor } from './editor.js';
-import { defaultDocument, parseDocument, UNITS } from './plotDocument.js';
+import { createPoint, defaultDocument, parseDocument, UNITS } from './plotDocument.js';
 import {
   isMeasurable,
   measurePoints,
@@ -33,9 +33,11 @@ const ui = {
   tableBody: document.querySelector('#measurements tbody'),
   pointsEmpty: $('points-empty'),
   extentNote: $('extent-note'),
+  add: $('add'),
   clear: $('clear'),
   importButton: $('import'),
   file: $('file'),
+  annotate: $('annotate'),
   exportJson: $('export-json'),
   exportCsv: $('export-csv'),
   exportSvg: $('export-svg'),
@@ -65,7 +67,31 @@ function availableStorage() {
   }
 }
 
-const store = Store.fromStorage(availableStorage());
+const storage = availableStorage();
+const store = Store.fromStorage(storage);
+
+/**
+ * Preferences about *output* rather than about the plot, kept apart from the
+ * document so what gets exported stays byte-compatible with the iOS app.
+ */
+const PREFERENCES_KEY = 'abplot.web.preferences.v1';
+const preferences = { annotateExports: false, ...readPreferences() };
+
+function readPreferences() {
+  try {
+    return JSON.parse(storage?.getItem(PREFERENCES_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writePreferences() {
+  try {
+    storage?.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+  } catch {
+    // Same as the plot itself: unable to remember is not unable to work.
+  }
+}
 const editor = new PlotEditor(ui.canvas, store);
 
 let statusTimer = 0;
@@ -191,7 +217,9 @@ function measureInput(row, column, text) {
   input.setAttribute('aria-label', `${column.head} for point ${row.label}`);
   input.addEventListener('change', () => {
     const entered = input.value.trim();
-    const typed = Number(entered);
+    // Read "1,5" as 1.5: the app writes a decimal point, but a comma is what
+    // half the world's keyboards and tape measures say.
+    const typed = Number(entered.replace(',', '.'));
     if (entered === '' || !Number.isFinite(typed)) {
       // Put the old value back rather than moving the point somewhere arbitrary.
       input.value = text;
@@ -362,11 +390,21 @@ async function importFile(file) {
 /* ---------------------------------------------------------------- binding */
 
 ui.distance.addEventListener('input', () => {
-  const value = Number(ui.distance.value);
-  if (!Number.isFinite(value) || value < 0) return;
+  // A number input reports '' for anything it cannot parse -- including a
+  // half-typed value -- and Number('') is 0, which would quietly unscale the
+  // plot. Leave the document alone until the field says something meaningful.
+  const entered = ui.distance.value.trim();
+  const value = Number(entered);
+  if (entered === '' || !Number.isFinite(value) || value < 0) return;
   store.apply((draft) => {
     draft.abDistance = value;
   });
+});
+
+// Leaving the field puts back what the plot actually uses, so a rejected entry
+// cannot sit there looking as though it took.
+ui.distance.addEventListener('blur', () => {
+  ui.distance.value = String(store.document.abDistance);
 });
 
 ui.unit.addEventListener('change', () => {
@@ -381,6 +419,15 @@ ui.redo.addEventListener('click', () => store.redo());
 ui.fit.addEventListener('click', () => editor.fit());
 ui.zoomIn.addEventListener('click', () => editor.zoomBy(1.3));
 ui.zoomOut.addEventListener('click', () => editor.zoomBy(1 / 1.3));
+
+ui.add.addEventListener('click', () => {
+  // Selected, unlike a click on the canvas: the point was asked for rather than
+  // aimed at, so the next thing wanted is to type where it actually goes.
+  const point = createPoint(editor.viewCenter, store.document.points);
+  store.apply((draft) => draft.points.push(point));
+  store.select(point.id);
+  setStatus(`Added point ${point.label} — type its Along and Perp. to place it.`);
+});
 
 ui.clear.addEventListener('click', () => {
   const count = store.document.points.length;
@@ -409,16 +456,22 @@ ui.exportCsv.addEventListener('click', () => {
   setStatus('Exported plot-measurements.csv.');
 });
 ui.exportSvg.addEventListener('click', () => {
-  downloadSvg(store.document);
+  downloadSvg(store.document, { annotate: preferences.annotateExports });
   setStatus('Exported plot.svg.');
 });
 ui.exportPng.addEventListener('click', async () => {
   try {
-    await downloadPng(store.document);
+    await downloadPng(store.document, { annotate: preferences.annotateExports });
     setStatus('Exported plot.png.');
   } catch (error) {
     setStatus(`Could not export the PNG: ${error.message}`, 'error');
   }
+});
+
+ui.annotate.checked = preferences.annotateExports;
+ui.annotate.addEventListener('change', () => {
+  preferences.annotateExports = ui.annotate.checked;
+  writePreferences();
 });
 
 for (const type of ['dragover', 'drop']) {

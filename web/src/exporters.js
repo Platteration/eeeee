@@ -9,7 +9,7 @@
 import { abDistanceMeters, serializeDocument, UNITS } from './plotDocument.js';
 import { measurePoints, plotExtent } from './measurements.js';
 import { abGrid } from './grid.js';
-import { formatCompact, formatLength, fromMeters, niceStep } from './format.js';
+import { formatCompact, formatLength, formatSigned, fromMeters, niceStep } from './format.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -88,10 +88,17 @@ export function toCsv(doc) {
  * The grid, scale bar and caption make it a drawing that can be measured on
  * paper, not just looked at.
  *
+ * With `annotate`, each point carries its own measurements on the drawing, so
+ * setting out a plot on site needs no table to cross-reference.
+ *
  * @param {object} doc
- * @param {{width?: number, padding?: number, title?: string, showGrid?: boolean}} [options]
+ * @param {{width?: number, padding?: number, title?: string, showGrid?: boolean,
+ *          annotate?: boolean}} [options]
  */
-export function toSvg(doc, { width = 1000, padding = 48, title = 'AB plot', showGrid = true } = {}) {
+export function toSvg(
+  doc,
+  { width = 1000, padding = 48, title = 'AB plot', showGrid = true, annotate = false } = {},
+) {
   const bounds = contentBounds(doc);
   const spanX = Math.max(bounds.maxX - bounds.minX, 1);
   const spanY = Math.max(bounds.maxY - bounds.minY, 1);
@@ -147,6 +154,7 @@ export function toSvg(doc, { width = 1000, padding = 48, title = 'AB plot', show
       `stroke="#8a8a8e" stroke-width="${2 * px}" stroke-dasharray="${6 * px} ${4 * px}"/>`,
   );
 
+  const annotations = annotate ? new Map(measurePoints(doc).map((row) => [row.id, row])) : null;
   for (const point of doc.points) {
     parts.push(
       `<circle cx="${point.position.x}" cy="${point.position.y}" r="${12 * px}" fill="#0a84ff" ` +
@@ -154,6 +162,20 @@ export function toSvg(doc, { width = 1000, padding = 48, title = 'AB plot', show
       `<text x="${point.position.x}" y="${point.position.y}" font-size="${11 * px}" fill="#ffffff" ` +
         `text-anchor="middle" dominant-baseline="central">${escapeXml(point.label)}</text>`,
     );
+
+    const row = annotations?.get(point.id);
+    if (row && row.along !== null) {
+      // Set below the dot rather than beside it, so a column of points does not
+      // overwrite its neighbours' numbers.
+      const text = `${formatSigned(row.along, doc.unit, { withUnit: false })}, ` +
+        `${formatSigned(row.perp, doc.unit, { withUnit: false })}`;
+      parts.push(
+        `<text x="${point.position.x}" y="${point.position.y + 26 * px}" font-size="${11 * px}" ` +
+          `fill="#3a3a3c" text-anchor="middle" ` +
+          `paint-order="stroke" stroke="#ffffff" stroke-width="${3 * px}" stroke-linejoin="round">` +
+          `${escapeXml(text)}</text>`,
+      );
+    }
   }
 
   for (const [name, position, fill] of [
@@ -194,6 +216,11 @@ export function toSvg(doc, { width = 1000, padding = 48, title = 'AB plot', show
   const summary = [
     `A–B ${formatLength(abMeters, doc.unit)}`,
     `${doc.points.length} point${doc.points.length === 1 ? '' : 's'}`,
+    // Only claim the labels when some were actually drawn: with no scale there
+    // is nothing to label, however the option is set.
+    annotations && [...annotations.values()].some((row) => row.along !== null)
+      ? 'labelled along, across'
+      : null,
     extent
       ? `extent ${formatLength(extent.along, doc.unit)} × ${formatLength(extent.perp, doc.unit)}`
       : null,
@@ -235,13 +262,13 @@ export function downloadCsv(doc, filename = 'plot-measurements.csv') {
   downloadText(filename, toCsv(doc), 'text/csv');
 }
 
-export function downloadSvg(doc, filename = 'plot.svg') {
-  downloadText(filename, toSvg(doc), 'image/svg+xml');
+export function downloadSvg(doc, { filename = 'plot.svg', annotate = false } = {}) {
+  downloadText(filename, toSvg(doc, { annotate }), 'image/svg+xml');
 }
 
 /** Rasterize the export SVG and download it as a PNG. */
-export async function downloadPng(doc, { filename = 'plot.png', scale = 2 } = {}) {
-  const markup = toSvg(doc);
+export async function downloadPng(doc, { filename = 'plot.png', scale = 2, annotate = false } = {}) {
+  const markup = toSvg(doc, { annotate });
   const width = Number(markup.match(/width="(\d+)"/)[1]);
   const height = Number(markup.match(/height="(\d+)"/)[1]);
   const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));

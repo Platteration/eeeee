@@ -75,6 +75,12 @@ export class PlotEditor extends EventTarget {
     return this.#view.unitsPerPixel;
   }
 
+  /** The canvas point at the middle of the view: where to put something the
+   *  user asked for without pointing at a spot. */
+  get viewCenter() {
+    return { x: this.#view.cx, y: this.#view.cy };
+  }
+
   #size() {
     const rect = this.#svg.getBoundingClientRect();
     return { width: Math.max(rect.width, 1), height: Math.max(rect.height, 1) };

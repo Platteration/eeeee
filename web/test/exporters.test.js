@@ -106,6 +106,21 @@ describe('toSvg', () => {
     assert.doesNotMatch(plain, /grid \d/);
   });
 
+  it('can label each point with its own measurements', () => {
+    const annotated = toSvg(doc, { annotate: true });
+    assert.match(annotated, /\+2\.00, -2\.00/);
+    assert.match(annotated, /labelled along, across/);
+    assertBalancedTags(annotated);
+    // Off by default, so a plain plan stays uncluttered.
+    assert.doesNotMatch(markup, /\+2\.00, -2\.00/);
+  });
+
+  it('leaves points it cannot measure unlabelled', () => {
+    const unscaled = toSvg({ ...doc, abDistance: 0 }, { annotate: true });
+    assert.doesNotMatch(unscaled, /labelled along/);
+    assertBalancedTags(unscaled);
+  });
+
   it('omits the scale bar when the plot has no scale', () => {
     const unscaled = toSvg({ ...doc, abDistance: 0 });
     assertBalancedTags(unscaled);

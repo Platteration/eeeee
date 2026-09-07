@@ -30,7 +30,7 @@ npm test           # the whole suite, no install required
 
 | | |
 | --- | --- |
-| Add a point | Click empty canvas |
+| Add a point | Click empty canvas, or **Add point** to drop one in the middle of the view |
 | Select / deselect | Click a point, or a row in the table |
 | Move | Drag a point, or the green **A** / red **B** handle; arrow keys nudge the selection (<kbd>Shift</kbd> for ten pixels at a time) |
 | Place exactly | Type into a point's **Along** or **Perp.** cell — see below |
@@ -51,6 +51,9 @@ single distance from A pins a point down.
 
 Entering a value on an unscaled plot is impossible rather than wrong: without a
 declared A–B distance those cells are plain text.
+
+Together with **Add point**, that also makes the whole app usable without a
+pointing device: add a point, tab to its cells, and type where it goes.
 
 ### Scale
 
@@ -75,7 +78,10 @@ side you see below the baseline looking straight down at the plot.
   file anywhere on the page to import it.
 - **Export CSV** is the measurement table, in the document's unit.
 - **Export SVG / PNG** is a printable plan: gridded, with a scale bar and a
-  caption giving the A–B distance, the point count and the plot's extent.
+  caption giving the A–B distance, the point count and the plot's extent. Tick
+  *Label points with their measurements* and every dot carries its own along
+  and across figures, so setting the plot out on site needs no second sheet to
+  cross-reference.
 
 ## The file format
 

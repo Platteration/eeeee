@@ -67,7 +67,10 @@
         <section class="panel-section panel-grow">
           <div class="section-head">
             <h2>Points</h2>
-            <button id="clear" type="button" class="link-button">Clear all</button>
+            <div class="section-actions">
+              <button id="add" type="button" class="link-button">Add point</button>
+              <button id="clear" type="button" class="link-button">Clear all</button>
+            </div>
           </div>
           <div class="table-scroll">
             <!-- Head and body are both built in app.js: the columns depend on
@@ -92,6 +95,10 @@
             <button id="reset" type="button">New plot</button>
           </div>
           <input id="file" type="file" accept="application/json,.json" hidden />
+          <label class="checkbox">
+            <input id="annotate" type="checkbox" />
+            Label points with their measurements on SVG and PNG exports
+          </label>
           <p class="note">
             JSON matches the ABPlot iOS app's <code>plot.json</code>. Copy it into the app's folder in the
             Files app, replacing that file, to place this plot in AR.
@@ -103,6 +110,7 @@
           <h2>How it works</h2>
           <ul class="help">
             <li>Click empty canvas to add a point; click a point to select it, drag to move it.</li>
+            <li>No mouse? <b>Add point</b> drops one in the middle of the view, ready to be typed into place.</li>
             <li>
               Or type: the <b>Along</b> and <b>Perp.</b> cells are editable, so a distance off a tape
               measure places a point exactly.
