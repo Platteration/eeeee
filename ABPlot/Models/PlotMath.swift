@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import simd
 
 /// Pure coordinate math mapping the 2D canvas plot onto the real world.
@@ -67,15 +68,25 @@ enum PlotMath {
         return (s, t)
     }
 
-    /// Yaw (rotation about +Y mapping local +X to the A→B direction) and the
-    /// horizontal tapped span in meters. Returns nil when the taps are too
-    /// close together to define a direction.
+    /// Yaw (rotation about +Y mapping local +X to the `start`→`end` direction)
+    /// and the horizontal distance between them, both unconditional.
+    ///
+    /// Used for preview geometry, which must stay well-defined at any length —
+    /// including zero, where the yaw is arbitrary but harmless.
+    static func horizontalYawAndSpan(
+        from start: SIMD3<Float>, to end: SIMD3<Float>
+    ) -> (yaw: Float, span: Float) {
+        let dx = end.x - start.x
+        let dz = end.z - start.z
+        return (atan2(-dz, dx), (dx * dx + dz * dz).squareRoot())
+    }
+
+    /// Yaw and horizontal span for *committing* a placement: nil when the two
+    /// points are too close together to define a trustworthy direction.
     static func yawAndDistance(worldA: SIMD3<Float>, worldB: SIMD3<Float>) -> (yaw: Float, tappedSpan: Float)? {
-        let dx = worldB.x - worldA.x
-        let dz = worldB.z - worldA.z
-        let span = (dx * dx + dz * dz).squareRoot()
+        let (yaw, span) = horizontalYawAndSpan(from: worldA, to: worldB)
         guard span >= minWorldABDistance else { return nil }
-        return (atan2(-dz, dx), span)
+        return (yaw, span)
     }
 
     /// Local position of a plot point under the yawed anchor at world A.
