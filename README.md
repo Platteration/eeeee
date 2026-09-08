@@ -22,18 +22,29 @@ iOS 16+, iPhone only.
 ### 2. AR mode
 - Tap **View in AR** (enabled once you have at least one point and a valid
   distance).
-- Scan a flat horizontal surface until the coaching overlay dismisses.
-- Tap the real-world location of **A**, then of **B**.
-- All plotted points appear on the surface, oriented along your tapped A→B
-  direction. **Reset** lets you re-place; **Done** returns to the editor.
+- Scan a flat horizontal surface. Once a surface is found, a yellow **reticle**
+  appears on it under the centre crosshair — you aim with the phone rather than
+  stabbing at the screen, so your finger never covers the target.
+- Aim at the real-world location of **A** and tap **Place A** (or tap anywhere
+  on the view).
+- A green **target ring** appears around A at exactly your declared A–B
+  distance, with a live line and a distance readout following the reticle. Land
+  B anywhere on that ring and the plot matches its declared scale exactly — the
+  readout shows the delta as you move ("1.87 m · declared 2.00 m (−6%)").
+- Tap **Place B**. All plotted points appear on the surface, with the A→B
+  baseline drawn on the floor so you can confirm the heading at a glance.
+- **Rotate** with the slider or the ±1° buttons to fine-tune orientation about
+  A. **Adjust B** re-aims the direction while keeping A where it is.
+  **Reset** clears both; **Done** returns to the editor.
 
 ### A note on scale
-The *declared* A–B distance sets the real-world scale — the tapped B fixes
-direction only. That keeps every dimension true even if a tap is a little
-off; the HUD reports the discrepancy between your tapped span and the
-declared distance (e.g. "tapped span 3.00 m vs declared 4.00 m (−25%)") so
-you can judge placement accuracy. If the rendered B marker isn't exactly
-where you tapped, that's this feedback, not a bug.
+The *declared* A–B distance sets the real-world scale — where you place B fixes
+direction only. That keeps every dimension true even if your placement is a
+little off; the HUD reports the discrepancy between your span and the declared
+distance (e.g. "your span 3.00 m vs declared 4.00 m (−25%)") so you can judge
+placement accuracy. If the rendered B marker isn't exactly where you placed it,
+that's this feedback, not a bug — the target ring is there to make matching the
+declared scale easy when you want it.
 
 ## Building
 
