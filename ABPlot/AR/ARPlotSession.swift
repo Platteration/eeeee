@@ -9,34 +9,102 @@ enum PlacementPhase: Equatable {
     case placed(worldA: SIMD3<Float>, yaw: Float, tappedSpan: Float)
 }
 
+/// Placement actions the AR coordinator performs on behalf of the HUD.
+@MainActor
+protocol ARPlotControlling: AnyObject {
+    /// Commit whatever the aiming reticle is currently pointing at.
+    func commitReticle()
+    /// Keep A, re-aim B.
+    func adjustB()
+    /// Clear the placement entirely.
+    func reset()
+    /// Rotate the placed plot about A by an offset from its committed heading.
+    func setYawOffset(_ radians: Float)
+}
+
 @MainActor
 final class ARPlotSession: ObservableObject {
     @Published var phase: PlacementPhase = .searchingForPlane
     @Published var hint: String?
 
+    /// Horizontal distance from the placed A to the current reticle, in meters,
+    /// while aiming B. Quantized to centimeters by the coordinator so this only
+    /// republishes when the readout would actually change.
+    @Published var reticleDistanceFromA: Float?
+
+    /// Whether the reticle currently has a surface under it.
+    @Published var reticleIsTracking: Bool = false
+
+    /// Rotation applied to the placed plot, in degrees from the heading you
+    /// committed. Drives both the fine-rotation slider and the ±1° buttons.
+    @Published private(set) var yawOffsetDegrees: Double = 0
+
     /// Declared A–B distance in meters, set by the AR screen for HUD text.
     var declaredSpanMeters: Double = 0
 
-    /// Set by the AR coordinator; the Reset button calls it.
-    var resetHandler: (() -> Void)?
+    /// The AR coordinator. Weak: the coordinator owns the AR view, not this.
+    weak var controller: (any ARPlotControlling)?
+
+    var isPlaced: Bool {
+        if case .placed = phase { return true }
+        return false
+    }
+
+    /// True once a surface is available and we're aiming at A or B. Excludes the
+    /// scanning phase so the HUD doesn't draw over the coaching overlay.
+    var isAiming: Bool {
+        switch phase {
+        case .waitingForA, .waitingForB: return true
+        case .searchingForPlane, .placed: return false
+        }
+    }
+
+    var placeButtonTitle: String {
+        if case .waitingForB = phase { return "Place B" }
+        return "Place A"
+    }
 
     var instruction: String {
         switch phase {
         case .searchingForPlane:
             return "Move your phone to scan a flat surface"
         case .waitingForA:
-            return "Tap the real-world location of point A"
+            return "Aim the crosshair at point A, then tap Place"
         case .waitingForB:
-            return "Now tap the real-world location of point B"
+            return "Aim at point B — land on the ring for true scale"
         case .placed(_, _, let tappedSpan):
-            let declared = declaredSpanMeters
-            guard declared > 0 else { return "Placed" }
-            let deltaPercent = (Double(tappedSpan) - declared) / declared * 100
+            guard declaredSpanMeters > 0 else { return "Placed" }
+            let deltaPercent = (Double(tappedSpan) - declaredSpanMeters) / declaredSpanMeters * 100
             return String(
-                format: "Placed · tapped span %.2f m vs declared %.2f m (%+.0f%%)",
-                tappedSpan, declared, deltaPercent
+                format: "Placed · your span %.2f m vs declared %.2f m (%+.0f%%)",
+                tappedSpan, declaredSpanMeters, deltaPercent
             )
         }
+    }
+
+    /// Live distance readout shown while aiming B.
+    var liveMeasurement: String? {
+        guard case .waitingForB = phase, let distance = reticleDistanceFromA else { return nil }
+        guard declaredSpanMeters > 0 else { return String(format: "%.2f m", distance) }
+        let deltaPercent = (Double(distance) - declaredSpanMeters) / declaredSpanMeters * 100
+        return String(
+            format: "%.2f m · declared %.2f m (%+.0f%%)",
+            distance, declaredSpanMeters, deltaPercent
+        )
+    }
+
+    /// Rotate the placed plot to `degrees` away from its committed heading.
+    /// Named distinctly from the controller's radian-based `setYawOffset` so the
+    /// two are never confused at a call site.
+    func setRotation(degrees: Double) {
+        let clamped = min(max(degrees, -180), 180)
+        yawOffsetDegrees = clamped
+        controller?.setYawOffset(Float(clamped) * .pi / 180)
+    }
+
+    /// Called by the coordinator when a fresh placement resets the heading.
+    func clearYawOffset() {
+        yawOffsetDegrees = 0
     }
 
     func showHint(_ message: String) {
