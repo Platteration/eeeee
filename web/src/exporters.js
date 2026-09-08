@@ -7,8 +7,9 @@
  */
 
 import { abDistanceMeters, serializeDocument, UNITS } from './plotDocument.js';
-import { measurePoints, plotExtent } from './measurements.js';
+import { measurePoints, metersPerCanvasUnit, plotExtent } from './measurements.js';
 import { abGrid } from './grid.js';
+import { MM_PER_PX, drawingArea, fitScale, formatScale, mmPerMeter, sheetSize } from './paper.js';
 import { formatCompact, formatLength, formatSigned, fromMeters, niceStep } from './format.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -82,52 +83,158 @@ export function toCsv(doc) {
 }
 
 /**
+ * How much ground a plan of this plot has to cover, in metres, measured along
+ * the canvas axes the sheet is aligned to.
+ *
+ * Annotated points hang below their dots and the A/B handles sit proud of the
+ * extremes, so it asks for a little more room than the bare content bounds.
+ * Exported because the panel predicts the scale of the next export with it: if
+ * it guessed the content size differently from the renderer, the two would
+ * disagree at exactly the boundary where it matters.
+ */
+export function planContentSize(doc, { annotate = false } = {}) {
+  const metersPerUnit = metersPerCanvasUnit(doc);
+  if (metersPerUnit === null) return null;
+  const bounds = contentBounds(doc);
+  const slack = (annotate ? 34 : 18) * metersPerUnit;
+  return {
+    widthMeters: (bounds.maxX - bounds.minX) * metersPerUnit + slack,
+    heightMeters: (bounds.maxY - bounds.minY) * metersPerUnit + slack,
+  };
+}
+
+/**
+ * Fit the plot to a given output width: the drawing is whatever size suits the
+ * screen, and the scale is whatever falls out of that.
+ *
+ * `px` is canvas units per output pixel, which is what every drawn size is
+ * expressed in, so the rest of the renderer never has to know which layout it
+ * is working with.
+ */
+function fittedLayout(doc, { width, padding, footer }) {
+  const bounds = contentBounds(doc);
+  const spanX = Math.max(bounds.maxX - bounds.minX, 1);
+  const spanY = Math.max(bounds.maxY - bounds.minY, 1);
+  const px = spanX / (width - padding * 2);
+  const height = Math.round(spanY / px) + padding * 2 + footer;
+  return {
+    widthAttribute: String(width),
+    heightAttribute: String(height),
+    px,
+    footerPx: footer,
+    viewBox: { x: bounds.minX - padding * px, y: bounds.minY - padding * px, w: width * px, h: height * px },
+  };
+}
+
+/**
+ * Lay the plot on a sheet of paper at a true scale: at 1:100 a metre on the
+ * ground is 10 mm on the page, whatever size the file is displayed at.
+ *
+ * The sheet is declared in millimetres and the viewBox in canvas units, so the
+ * two together fix the scale; `px` stays canvas units per CSS pixel, since SVG
+ * defines a pixel as 1/96 in and that is what makes a 12 px dot 3.2 mm of ink.
+ *
+ * Returns null when the plot has no scale, or none of the standard ratios fits.
+ */
+function paperLayout(doc, { paper, orientation, ratio, margin, footer, annotate }) {
+  const metersPerUnit = metersPerCanvasUnit(doc);
+  const content = planContentSize(doc, { annotate });
+  if (content === null) return null;
+
+  const bounds = contentBounds(doc);
+  const area = drawingArea(paper, orientation, { margin, footer });
+  const scale = ratio ?? fitScale(content, area);
+  if (!scale) return null;
+
+  const sheet = sheetSize(paper, orientation);
+  const mmPerUnit = metersPerUnit * mmPerMeter(scale);
+  const px = MM_PER_PX / mmPerUnit; // canvas units per CSS pixel
+  const viewWidth = sheet.width / mmPerUnit;
+  const viewHeight = sheet.height / mmPerUnit;
+
+  return {
+    widthAttribute: `${round(sheet.width)}mm`,
+    heightAttribute: `${round(sheet.height)}mm`,
+    px,
+    footerPx: footer / MM_PER_PX,
+    scale,
+    fits:
+      content.widthMeters * mmPerMeter(scale) <= area.width &&
+      content.heightMeters * mmPerMeter(scale) <= area.height,
+    viewBox: {
+      // Centre the plot across the sheet, and in the space above the footer.
+      x: (bounds.minX + bounds.maxX) / 2 - viewWidth / 2,
+      y: (bounds.minY + bounds.maxY) / 2 - (viewHeight - footer / mmPerUnit) / 2,
+      w: viewWidth,
+      h: viewHeight,
+    },
+  };
+}
+
+const round = (value) => Number(value.toFixed(2));
+
+/**
  * A standalone SVG of the plot -- self-contained (inline styling, no external
  * fonts or CSS) so it prints, embeds and opens anywhere.
  *
  * The grid, scale bar and caption make it a drawing that can be measured on
- * paper, not just looked at.
+ * paper, not just looked at. Pass `paper` (and optionally `orientation` and a
+ * `scale` ratio, or leave the scale to be chosen) to lay it on a real sheet at
+ * a true scale instead of fitting it to a pixel width.
  *
  * With `annotate`, each point carries its own measurements on the drawing, so
  * setting out a plot on site needs no table to cross-reference.
  *
  * @param {object} doc
  * @param {{width?: number, padding?: number, title?: string, showGrid?: boolean,
- *          annotate?: boolean}} [options]
+ *          annotate?: boolean, paper?: string, orientation?: string,
+ *          scale?: number|null}} [options]
  */
 export function toSvg(
   doc,
-  { width = 1000, padding = 48, title = 'AB plot', showGrid = true, annotate = false } = {},
+  {
+    width = 1000,
+    padding = 48,
+    title = 'AB plot',
+    showGrid = true,
+    annotate = false,
+    paper = null,
+    orientation = 'landscape',
+    scale = null,
+  } = {},
 ) {
-  const bounds = contentBounds(doc);
-  const spanX = Math.max(bounds.maxX - bounds.minX, 1);
-  const spanY = Math.max(bounds.maxY - bounds.minY, 1);
-  // Reserve a strip under the drawing for the scale bar and caption.
-  const footer = 78;
-  const contentWidth = width - padding * 2;
-  const unitsPerPx = spanX / contentWidth;
-  const height = Math.round(spanY / unitsPerPx) + padding * 2 + footer;
+  // A named plot gets a title line, and the strip beneath the drawing grows to
+  // hold it.
+  const name = doc.name?.trim() ?? '';
+  const layout =
+    (paper &&
+      paperLayout(doc, {
+        paper,
+        orientation,
+        ratio: scale,
+        margin: 12,
+        footer: name ? 24 : 16,
+        annotate,
+      })) ||
+    // Falling back keeps a plot exportable even when it has no scale to print
+    // at, or is too large for any standard ratio on the chosen sheet.
+    fittedLayout(doc, { width, padding, footer: name ? 108 : 78 });
 
-  const viewBox = {
-    x: bounds.minX - padding * unitsPerPx,
-    y: bounds.minY - padding * unitsPerPx,
-    w: width * unitsPerPx,
-    h: height * unitsPerPx,
-  };
-  const px = unitsPerPx; // canvas units per output pixel
+  const { viewBox, px } = layout;
   // The drawing occupies everything above the footer strip; the grid is built
   // for exactly that region and clipped to it so it cannot run under the
   // scale bar and caption.
-  const plotArea = { x: viewBox.x, y: viewBox.y, w: viewBox.w, h: viewBox.h - footer * px };
+  const plotArea = { x: viewBox.x, y: viewBox.y, w: viewBox.w, h: viewBox.h - layout.footerPx * px };
   const grid = showGrid ? abGrid(doc, plotArea, 40 * px) : null;
+  const footer = layout.footerPx;
   const parts = [];
 
   parts.push(
-    `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" ` +
+    `<svg xmlns="${SVG_NS}" width="${layout.widthAttribute}" height="${layout.heightAttribute}" ` +
       `viewBox="${viewBox.x.toFixed(3)} ${viewBox.y.toFixed(3)} ${viewBox.w.toFixed(3)} ${viewBox.h.toFixed(3)}" ` +
       `font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">`,
   );
-  parts.push(`<title>${escapeXml(title)}</title>`);
+  parts.push(`<title>${escapeXml(name || title)}</title>`);
   parts.push(`<rect x="${viewBox.x}" y="${viewBox.y}" width="${viewBox.w}" height="${viewBox.h}" fill="#ffffff"/>`);
 
   // The same baseline-aligned grid the editor draws: without it a printout can
@@ -213,7 +320,15 @@ export function toSvg(
     );
   }
 
+  if (name) {
+    parts.push(
+      `<text x="${left}" y="${footerY - 18 * px}" font-size="${16 * px}" font-weight="700" ` +
+        `fill="#1c1c1e">${escapeXml(name)}</text>`,
+    );
+  }
+
   const summary = [
+    layout.scale ? formatScale(layout.scale) : null,
     `A–B ${formatLength(abMeters, doc.unit)}`,
     `${doc.points.length} point${doc.points.length === 1 ? '' : 's'}`,
     // Only claim the labels when some were actually drawn: with no scale there
@@ -262,28 +377,51 @@ export function downloadCsv(doc, filename = 'plot-measurements.csv') {
   downloadText(filename, toCsv(doc), 'text/csv');
 }
 
-export function downloadSvg(doc, { filename = 'plot.svg', annotate = false } = {}) {
-  downloadText(filename, toSvg(doc, { annotate }), 'image/svg+xml');
+export function downloadSvg(doc, { filename = 'plot.svg', ...options } = {}) {
+  downloadText(filename, toSvg(doc, options), 'image/svg+xml');
 }
 
-/** Rasterize the export SVG and download it as a PNG. */
-export async function downloadPng(doc, { filename = 'plot.png', scale = 2, annotate = false } = {}) {
-  const markup = toSvg(doc, { annotate });
-  const width = Number(markup.match(/width="(\d+)"/)[1]);
-  const height = Number(markup.match(/height="(\d+)"/)[1]);
+/**
+ * The pixel size to rasterize a sheet at.
+ *
+ * A fitted export is already sized in pixels and just gets a retina multiplier.
+ * A paper sheet is sized in millimetres, so it is rasterized at a print
+ * resolution instead -- 300 dpi, which is what makes an A4 plan come out as a
+ * usable 3508 px image rather than a 1123 px screenshot of one.
+ */
+export function rasterSize(markup, { pixelRatio, dpi }) {
+  const [, width, unit] = markup.match(/width="([\d.]+)(mm)?"/);
+  const [, height] = markup.match(/height="([\d.]+)(?:mm)?"/);
+  const factor = unit === 'mm' ? dpi / 25.4 : pixelRatio;
+  // A zero or missing factor would make a 0x0 canvas, which encodes to nothing
+  // and reports itself only as "could not encode". Say what is actually wrong.
+  if (!Number.isFinite(factor) || factor <= 0) {
+    throw new Error(`Cannot rasterize at ${unit === 'mm' ? `${dpi} dpi` : `a pixel ratio of ${pixelRatio}`}`);
+  }
+  return { width: Math.round(Number(width) * factor), height: Math.round(Number(height) * factor) };
+}
+
+/**
+ * Rasterize the export SVG and download it as a PNG.
+ *
+ * The multiplier is `pixelRatio`, deliberately not `scale`: `scale` already
+ * means the drawing ratio in {@link toSvg}, and the two travel together in the
+ * same options object.
+ */
+export async function downloadPng(doc, { filename = 'plot.png', pixelRatio = 2, dpi = 300, ...options } = {}) {
+  const markup = toSvg(doc, options);
+  const { width, height } = rasterSize(markup, { pixelRatio, dpi });
   const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));
   try {
     const image = new Image();
-    image.width = width;
-    image.height = height;
     await new Promise((resolve, reject) => {
       image.addEventListener('load', resolve, { once: true });
       image.addEventListener('error', () => reject(new Error('Could not render the plot to an image')), { once: true });
       image.src = url;
     });
     const canvas = document.createElement('canvas');
-    canvas.width = width * scale;
-    canvas.height = height * scale;
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext('2d');
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);

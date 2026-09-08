@@ -52,6 +52,15 @@
 
       <aside class="panel">
         <section class="panel-section">
+          <h2>Plot</h2>
+          <div class="field-row">
+            <label for="name">Name</label>
+            <input id="name" type="text" placeholder="Untitled plot" maxlength="80" />
+          </div>
+          <p class="note">Titles the drawing and names its exported files.</p>
+        </section>
+
+        <section class="panel-section">
           <h2>Scale</h2>
           <div class="field-row">
             <label for="ab-distance">A–B distance</label>
@@ -95,6 +104,29 @@
             <button id="reset" type="button">New plot</button>
           </div>
           <input id="file" type="file" accept="application/json,.json" hidden />
+          <div class="field-row">
+            <label for="sheet">Plan sheet</label>
+            <select id="sheet">
+              <option value="">Fit to content</option>
+              <option value="a4-landscape">A4 landscape</option>
+              <option value="a4-portrait">A4 portrait</option>
+              <option value="a3-landscape">A3 landscape</option>
+              <option value="a3-portrait">A3 portrait</option>
+              <option value="letter-landscape">Letter landscape</option>
+              <option value="letter-portrait">Letter portrait</option>
+              <option value="tabloid-landscape">Tabloid landscape</option>
+            </select>
+            <select id="plan-scale" aria-label="Drawing scale" disabled>
+              <option value="">Auto</option>
+              <option value="20">1:20</option>
+              <option value="50">1:50</option>
+              <option value="100">1:100</option>
+              <option value="200">1:200</option>
+              <option value="500">1:500</option>
+              <option value="1000">1:1000</option>
+            </select>
+          </div>
+          <p id="sheet-note" class="note"></p>
           <label class="checkbox">
             <input id="annotate" type="checkbox" />
             Label points with their measurements on SVG and PNG exports

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { toCsv, toSvg } from '../src/exporters.js';
+import { planContentSize, rasterSize, toCsv, toSvg } from '../src/exporters.js';
+import { drawingArea, fitScale } from '../src/paper.js';
 
 const doc = {
   pointA: { x: 100, y: 300 },
@@ -125,5 +126,114 @@ describe('toSvg', () => {
     const unscaled = toSvg({ ...doc, abDistance: 0 });
     assertBalancedTags(unscaled);
     assert.doesNotMatch(unscaled, /<line[^>]*stroke="#1c1c1e"/);
+  });
+});
+
+describe('toSvg on paper', () => {
+  /** Millimetres of paper per canvas unit, read back off the finished sheet. */
+  function millimetresPerUnit(markup) {
+    const width = Number(markup.match(/width="([\d.]+)mm"/)[1]);
+    const view = markup.match(/viewBox="([-\d.]+) ([-\d.]+) ([\d.]+) ([\d.]+)"/);
+    return width / Number(view[3]);
+  }
+
+  it('draws at a true scale: 1:100 makes a 4 m baseline 40 mm of paper', () => {
+    const sheet = toSvg(doc, { paper: 'a4', scale: 100 });
+    const perUnit = millimetresPerUnit(sheet);
+    const baseline = Math.hypot(doc.pointB.x - doc.pointA.x, doc.pointB.y - doc.pointA.y);
+    assert.ok(Math.abs(baseline * perUnit - 40) < 0.01, `baseline measured ${baseline * perUnit} mm`);
+  });
+
+  it('halving the ratio doubles the ink', () => {
+    const hundred = millimetresPerUnit(toSvg(doc, { paper: 'a4', scale: 100 }));
+    const fifty = millimetresPerUnit(toSvg(doc, { paper: 'a4', scale: 50 }));
+    assert.ok(Math.abs(fifty / hundred - 2) < 1e-9);
+  });
+
+  it('sizes the sheet in millimetres and turns it for orientation', () => {
+    assert.match(toSvg(doc, { paper: 'a4' }), /width="297mm" height="210mm"/);
+    assert.match(toSvg(doc, { paper: 'a4', orientation: 'portrait' }), /width="210mm" height="297mm"/);
+    assert.match(toSvg(doc, { paper: 'a3' }), /width="420mm" height="297mm"/);
+  });
+
+  const chosenScale = (options) => Number(toSvg(doc, options).match(/1:(\d+)/)[1]);
+
+  it('chooses the largest scale that fits when none is given', () => {
+    assert.equal(chosenScale({ paper: 'a4' }), 50);
+    // A bigger sheet takes a bigger drawing of the same plot.
+    assert.ok(chosenScale({ paper: 'a3' }) < chosenScale({ paper: 'a4' }));
+    // And turning the sheet changes which dimension runs out first.
+    assert.notEqual(chosenScale({ paper: 'a4', orientation: 'portrait' }), chosenScale({ paper: 'a4' }));
+  });
+
+  it('draws a plot a hundred times bigger a hundred times smaller', () => {
+    const huge = toSvg({ ...doc, abDistance: 400 }, { paper: 'a4' });
+    assert.equal(Number(huge.match(/1:(\d+)/)[1]), 50 * 100);
+  });
+
+  it('states the scale on the drawing, and only when there is one', () => {
+    assert.match(toSvg(doc, { paper: 'a4', scale: 100 }), /1:100 {2}·/);
+    assert.doesNotMatch(toSvg(doc), /1:\d/);
+  });
+
+  it('falls back to a fitted picture rather than refusing to export', () => {
+    // No scale to print at: the drawing is still produced, just not on paper.
+    const unscaled = toSvg({ ...doc, abDistance: 0 }, { paper: 'a4' });
+    assert.doesNotMatch(unscaled, /mm"/);
+    assertBalancedTags(unscaled);
+  });
+
+  it('still draws a grid, points and the baseline on paper', () => {
+    const sheet = toSvg(doc, { paper: 'a4', annotate: true });
+    assert.equal(sheet.match(/<circle/g).length, doc.points.length + 2);
+    assert.ok(sheet.match(/stroke="#e5e5ea"/g).length > 4);
+    assert.match(sheet, /labelled along, across/);
+    assertBalancedTags(sheet);
+  });
+});
+
+describe('rasterSize', () => {
+  it('gives a pixel sheet a retina multiplier', () => {
+    const size = rasterSize(toSvg(doc, { width: 1000 }), { pixelRatio: 2, dpi: 300 });
+    assert.equal(size.width, 2000);
+  });
+
+  it('rasterizes a paper sheet at print resolution', () => {
+    // A4 landscape at 300 dpi is 3508 x 2480 px -- a printable image, not a
+    // screenshot of one.
+    const size = rasterSize(toSvg(doc, { paper: 'a4' }), { pixelRatio: 2, dpi: 300 });
+    assert.deepEqual(size, { width: 3508, height: 2480 });
+  });
+
+  it('refuses a factor that would make an empty canvas', () => {
+    // `scale` means the drawing ratio elsewhere in this module; passing it here
+    // by mistake used to yield a 0x0 canvas and an unexplained encoding failure.
+    const fitted = toSvg(doc, { width: 1000 });
+    assert.throws(() => rasterSize(fitted, { pixelRatio: null, dpi: 300 }), /Cannot rasterize/);
+    assert.throws(() => rasterSize(fitted, { pixelRatio: 0, dpi: 300 }), /Cannot rasterize/);
+    assert.throws(() => rasterSize(toSvg(doc, { paper: 'a4' }), { pixelRatio: 2, dpi: 0 }), /Cannot rasterize/);
+  });
+});
+
+describe('planContentSize', () => {
+  it('is what the renderer actually lays out, so a prediction cannot drift', () => {
+    for (const annotate of [false, true]) {
+      for (const paper of ['a4', 'a3', 'letter']) {
+        const content = planContentSize(doc, { annotate });
+        const predicted = fitScale(content, drawingArea(paper, 'landscape'));
+        const drawn = Number(toSvg(doc, { paper, annotate }).match(/1:(\d+)/)[1]);
+        assert.equal(predicted, drawn, `${paper}${annotate ? ' annotated' : ''}`);
+      }
+    }
+  });
+
+  it('leaves room for the labels it will have to draw', () => {
+    const plain = planContentSize(doc);
+    const labelled = planContentSize(doc, { annotate: true });
+    assert.ok(labelled.heightMeters > plain.heightMeters);
+  });
+
+  it('is null without a scale to measure in', () => {
+    assert.equal(planContentSize({ ...doc, abDistance: 0 }), null);
   });
 });

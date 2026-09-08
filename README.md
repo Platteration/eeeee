@@ -44,8 +44,9 @@ where you tapped, that's this feedback, not a bug.
 ## Web companion
 
 `web/` holds a browser version of the plot editor: the same A–B geometry, the
-same `plot.json`, plus the measurement table, printable plans and CSV export
-that a mouse and a big screen make easy. It has no AR mode — draw and check the
+same `plot.json`, plus the measurement table, CSV export, and plans printable
+at a true scale (1:100 on A4, and so on) that a mouse and a big screen make
+easy. It has no AR mode — draw and check the
 plot there, export the JSON, and open it here to place it. See
 [`web/README.md`](web/README.md).
 

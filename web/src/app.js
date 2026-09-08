@@ -5,7 +5,7 @@
 
 import { Store } from './store.js';
 import { PlotEditor } from './editor.js';
-import { createPoint, defaultDocument, parseDocument, UNITS } from './plotDocument.js';
+import { createPoint, defaultDocument, fileStem, parseDocument, UNITS } from './plotDocument.js';
 import {
   isMeasurable,
   measurePoints,
@@ -15,7 +15,8 @@ import {
 } from './measurements.js';
 import { formatLength, formatSigned, toMeters } from './format.js';
 import { canvasABLength } from './plotMath.js';
-import { downloadCsv, downloadJson, downloadPng, downloadSvg } from './exporters.js';
+import { downloadCsv, downloadJson, downloadPng, downloadSvg, planContentSize } from './exporters.js';
+import { drawingArea, fitScale, formatScale } from './paper.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,6 +27,7 @@ const ui = {
   fit: $('fit'),
   zoomIn: $('zoom-in'),
   zoomOut: $('zoom-out'),
+  name: $('name'),
   distance: $('ab-distance'),
   unit: $('unit'),
   scaleNote: $('scale-note'),
@@ -38,6 +40,9 @@ const ui = {
   importButton: $('import'),
   file: $('file'),
   annotate: $('annotate'),
+  sheet: $('sheet'),
+  planScale: $('plan-scale'),
+  sheetNote: $('sheet-note'),
   exportJson: $('export-json'),
   exportCsv: $('export-csv'),
   exportSvg: $('export-svg'),
@@ -75,7 +80,7 @@ const store = Store.fromStorage(storage);
  * document so what gets exported stays byte-compatible with the iOS app.
  */
 const PREFERENCES_KEY = 'abplot.web.preferences.v1';
-const preferences = { annotateExports: false, ...readPreferences() };
+const preferences = { annotateExports: false, sheet: '', planScale: '', ...readPreferences() };
 
 function readPreferences() {
   try {
@@ -106,6 +111,7 @@ function setStatus(message, tone = 'ok') {
 /* ------------------------------------------------------------------ panel */
 
 function renderScale(doc) {
+  if (document.activeElement !== ui.name) ui.name.value = doc.name ?? '';
   if (document.activeElement !== ui.distance) ui.distance.value = String(doc.abDistance);
   ui.unit.value = doc.unit;
 
@@ -357,6 +363,7 @@ function render() {
   renderTable(doc);
   ui.undo.disabled = !store.canUndo;
   ui.redo.disabled = !store.canRedo;
+  renderSheetNote();
   renderScaleBar(editor.scaleBar());
 }
 
@@ -388,6 +395,13 @@ async function importFile(file) {
 }
 
 /* ---------------------------------------------------------------- binding */
+
+ui.name.addEventListener('input', () => {
+  const name = ui.name.value;
+  store.apply((draft) => {
+    draft.name = name;
+  });
+});
 
 ui.distance.addEventListener('input', () => {
   // A number input reports '' for anything it cannot parse -- including a
@@ -447,22 +461,48 @@ ui.file.addEventListener('change', async () => {
   ui.file.value = '';
 });
 
+/** Exported files are named after the plot, so a folder of them stays legible. */
+const exportName = (suffix) => `${fileStem(store.document)}${suffix}`;
+
 ui.exportJson.addEventListener('click', () => {
-  downloadJson(store.document);
-  setStatus('Exported plot.json — open it in the iOS app to place it in AR.');
+  const filename = exportName('.json');
+  downloadJson(store.document, filename);
+  setStatus(
+    filename === 'plot.json'
+      ? 'Exported plot.json — copy it into the iOS app’s folder to place it in AR.'
+      : `Exported ${filename} — rename it plot.json for the iOS app to read it.`,
+  );
 });
 ui.exportCsv.addEventListener('click', () => {
-  downloadCsv(store.document);
-  setStatus('Exported plot-measurements.csv.');
+  const filename = exportName('-measurements.csv');
+  downloadCsv(store.document, filename);
+  setStatus(`Exported ${filename}.`);
 });
+/**
+ * How the plan exports should be laid out: fitted to a pixel width, or on a
+ * real sheet at a true scale. The sheet select carries paper and orientation
+ * together, since nobody thinks of them separately.
+ */
+function planOptions() {
+  const [paper, orientation] = preferences.sheet.split('-');
+  return {
+    annotate: preferences.annotateExports,
+    paper: paper || null,
+    orientation: orientation ?? 'landscape',
+    scale: preferences.planScale ? Number(preferences.planScale) : null,
+  };
+}
+
 ui.exportSvg.addEventListener('click', () => {
-  downloadSvg(store.document, { annotate: preferences.annotateExports });
-  setStatus('Exported plot.svg.');
+  const filename = exportName('.svg');
+  downloadSvg(store.document, { ...planOptions(), filename });
+  setStatus(`Exported ${filename}.`);
 });
 ui.exportPng.addEventListener('click', async () => {
+  const filename = exportName('.png');
   try {
-    await downloadPng(store.document, { annotate: preferences.annotateExports });
-    setStatus('Exported plot.png.');
+    await downloadPng(store.document, { ...planOptions(), filename });
+    setStatus(`Exported ${filename}.`);
   } catch (error) {
     setStatus(`Could not export the PNG: ${error.message}`, 'error');
   }
@@ -473,6 +513,53 @@ ui.annotate.addEventListener('change', () => {
   preferences.annotateExports = ui.annotate.checked;
   writePreferences();
 });
+
+ui.sheet.value = preferences.sheet;
+ui.planScale.value = preferences.planScale;
+for (const [element, key] of [
+  [ui.sheet, 'sheet'],
+  [ui.planScale, 'planScale'],
+]) {
+  element.addEventListener('change', () => {
+    preferences[key] = element.value;
+    writePreferences();
+    renderSheetNote();
+  });
+}
+
+/**
+ * Say what the next plan export will actually be — which scale, and whether
+ * the plot fits on the chosen sheet — rather than letting the file be the
+ * first place that turns up.
+ */
+function renderSheetNote() {
+  const options = planOptions();
+  ui.planScale.disabled = !options.paper;
+  if (!options.paper) {
+    ui.sheetNote.textContent = 'Plans are sized to fit their content. Pick a sheet to draw at a true scale.';
+    return;
+  }
+  // The renderer's own idea of how much ground the plan covers, so the note
+  // cannot promise a scale the export will not use.
+  const content = planContentSize(store.document, options);
+  if (!content) {
+    ui.sheetNote.textContent = 'Set a distance and a baseline to draw the plan to scale.';
+    return;
+  }
+  const largest = fitScale(content, drawingArea(options.paper, options.orientation));
+  if (options.scale) {
+    const fits = largest !== null && options.scale >= largest;
+    ui.sheetNote.textContent = fits
+      ? `Drawn at ${formatScale(options.scale)}: 1 m on the ground is ${(1000 / options.scale).toFixed(1)} mm on the page.`
+      : `The plot is too big for this sheet at ${formatScale(options.scale)}` +
+        `${largest === null ? '' : ` — ${formatScale(largest)} would fit`}.`;
+    return;
+  }
+  ui.sheetNote.textContent =
+    largest === null
+      ? 'The plot is too big for this sheet at any standard scale; the plan will be fitted instead.'
+      : `Drawn at ${formatScale(largest)}, the largest standard scale that fits this sheet.`;
+}
 
 for (const type of ['dragover', 'drop']) {
   document.addEventListener(type, (event) => {

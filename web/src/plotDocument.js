@@ -20,6 +20,12 @@
  * {@link serializeDocument} emits exactly that. {@link parseDocument} also
  * accepts the friendlier `{"x":…,"y":…}` form, so hand-written or
  * third-party files import without ceremony.
+ *
+ * One key is ours alone: an optional `name`, which titles the plot and its
+ * exports. Swift's `JSONDecoder` ignores keys its struct has no property for,
+ * so a named plot still opens on the phone -- it simply forgets the name when
+ * it saves. An unnamed plot writes no `name` key at all, leaving the file
+ * byte-identical to what the phone produces.
  */
 
 /** Length units, keyed by the raw value Swift's `LengthUnit` encodes. */
@@ -31,6 +37,7 @@ export const UNITS = {
 /** The iOS app's starting document, so both apps open on the same plot. */
 export function defaultDocument() {
   return {
+    name: '',
     pointA: { x: 100, y: 400 },
     pointB: { x: 300, y: 400 },
     abDistance: 2,
@@ -127,6 +134,7 @@ export function parseDocument(input) {
   });
 
   return {
+    name: raw.name === undefined || raw.name === null ? '' : String(raw.name),
     pointA: coercePoint(raw.pointA, 'pointA'),
     pointB: coercePoint(raw.pointB, 'pointB'),
     abDistance,
@@ -138,6 +146,8 @@ export function parseDocument(input) {
 /** The document as a plain object in the iOS wire format (CGPoints as arrays). */
 export function toWireFormat(doc) {
   return {
+    // Omitted when empty, so an unnamed plot is byte-identical to the phone's.
+    ...(doc.name ? { name: doc.name } : {}),
     pointA: [doc.pointA.x, doc.pointA.y],
     pointB: [doc.pointB.x, doc.pointB.y],
     abDistance: doc.abDistance,
@@ -160,4 +170,20 @@ export function toWireFormat(doc) {
 export function serializeDocument(doc, { pretty = true } = {}) {
   const json = JSON.stringify(toWireFormat(doc), null, pretty ? 2 : 0);
   return pretty ? json.replace(/\[\s+(-?[\d.eE+-]+),\s+(-?[\d.eE+-]+)\s+\]/g, '[$1, $2]') : json;
+}
+
+/**
+ * A filename stem for this plot's exports: its name reduced to something safe
+ * on every filesystem, or "plot" when it has no name.
+ */
+export function fileStem(doc) {
+  const slug = (doc.name ?? '')
+    .normalize('NFKD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .toLowerCase()
+    .slice(0, 60);
+  return slug || 'plot';
 }

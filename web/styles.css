@@ -299,6 +299,10 @@ main {
   flex: 1;
 }
 
+.field-row select {
+  min-width: 0;
+}
+
 .note {
   margin: 0;
   font-size: 0.75rem;
@@ -505,6 +509,15 @@ input[type="number"] {
   width: 6rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+input[type="text"] {
+  flex: 2;
+  min-width: 0;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.28rem 0.45rem;
 }
 
 input:focus-visible,

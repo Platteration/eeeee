@@ -5,6 +5,7 @@ import {
   abDistanceMeters,
   createPoint,
   defaultDocument,
+  fileStem,
   newId,
   nextLabel,
   parseDocument,
@@ -138,5 +139,35 @@ describe('abDistanceMeters', () => {
   it('converts feet to meters', () => {
     assert.equal(abDistanceMeters({ ...defaultDocument(), abDistance: 10, unit: 'feet' }), 3.048);
     assert.equal(abDistanceMeters({ ...defaultDocument(), abDistance: 10, unit: 'meters' }), 10);
+  });
+});
+
+describe('plot names', () => {
+  it('keeps a name when a file carries one', () => {
+    assert.equal(parseDocument({ ...JSON.parse(iosFile), name: 'North lawn' }).name, 'North lawn');
+    assert.equal(parseDocument(iosFile).name, '');
+  });
+
+  it('writes no name key at all when there is none, matching the phone byte for byte', () => {
+    const wire = JSON.parse(serializeDocument(parseDocument(iosFile)));
+    assert.ok(!('name' in wire));
+    assert.deepEqual(wire, JSON.parse(iosFile));
+  });
+
+  it('writes the name first when there is one, where the phone will ignore it', () => {
+    const text = serializeDocument({ ...parseDocument(iosFile), name: 'North lawn' });
+    assert.match(text, /^\{\n {2}"name": "North lawn",/);
+    assert.equal(parseDocument(text).name, 'North lawn');
+  });
+
+  it('makes a filesystem-safe stem out of the name', () => {
+    const stem = (name) => fileStem({ name });
+    assert.equal(stem('North lawn'), 'north-lawn');
+    assert.equal(stem('  Site 3: fence/posts  '), 'site-3-fenceposts');
+    assert.equal(stem('Café Ø'), 'cafe');
+    assert.equal(stem(''), 'plot');
+    assert.equal(stem('///'), 'plot');
+    assert.equal(fileStem({}), 'plot');
+    assert.ok(stem('x'.repeat(200)).length <= 60);
   });
 });

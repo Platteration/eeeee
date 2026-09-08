@@ -83,6 +83,25 @@ side you see below the baseline looking straight down at the plot.
   and across figures, so setting the plot out on site needs no second sheet to
   cross-reference.
 
+Give the plot a **name** and it titles the drawing and names every file it
+exports, so a folder of surveys stays legible.
+
+### Plans at a true scale
+
+By default a plan is sized to fit its content — a picture of the plot, at
+whatever scale falls out. Pick a **sheet** instead (A4, A3, Letter, Tabloid,
+either way up) and it becomes a drawing: laid out in millimetres at a stated
+ratio, so a ruler on the paper reads real distances.
+
+Leave the scale on *Auto* for the largest standard ratio that fits, or choose
+one. The panel says what the next export will be before you make it — including
+when a chosen scale is too large for the sheet, and which one would fit. The
+ratio is printed on the drawing, because a scaled plan that does not say its
+scale is not one.
+
+PNG exports of a sheet are rasterized at 300 dpi (an A4 plan comes out 3508 px
+wide), rather than the screen-sized image a fitted export gives.
+
 ## The file format
 
 Swift's `Codable` encodes `CGPoint` as a two-element array, `UUID` as an
@@ -102,6 +121,11 @@ That is exactly what this app writes. On import it also accepts `{"x": …,
 "y": …}` points and fills in an omitted `unit`, label or id, so a hand-written
 or third-party file loads without ceremony; anything genuinely ambiguous is
 rejected with a message rather than guessed at.
+
+One key is ours alone: an optional `name`. Swift's `JSONDecoder` ignores keys
+its struct has no property for, so a named plot still opens on the phone — it
+just forgets the name when it saves. An unnamed plot writes no `name` key at
+all, leaving the file byte-identical to what the phone produces.
 
 Canvas coordinates carry no units and no absolute meaning — only each point's
 position *relative to A and B* matters, which is why a plot drawn in a browser
@@ -132,6 +156,7 @@ src/
   plotDocument.js   document shape, defaults, JSON parsing and serializing
   measurements.js   the numbers behind the table
   grid.js           baseline-aligned grid lines, shared by canvas and export
+  paper.js          sheet sizes, drawing scales, and which one fits
   format.js         lengths, units, and "nice" round steps
   store.js          state, selection, undo history, autosave
   editor.js         the SVG canvas: rendering, pan, zoom, pointer editing
