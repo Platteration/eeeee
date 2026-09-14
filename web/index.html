@@ -99,6 +99,7 @@
         <section class="panel-section">
           <h2>File</h2>
           <div class="button-grid">
+            <button id="bulk-entry" type="button">Enter measurements…</button>
             <button id="import" type="button">Import JSON…</button>
             <button id="export-json" type="button">Export JSON</button>
             <button id="export-csv" type="button">Export CSV</button>
@@ -162,6 +163,34 @@
       </aside>
     </main>
 
+    <dialog id="measurement-import" aria-labelledby="entry-title">
+      <div class="section-head"><h2 id="entry-title">Enter measurements</h2><button id="entry-close" type="button">Close</button></div>
+      <p>Paste a table, open a CSV, or read a photo. Nothing changes in your plot until you apply the reviewed points.</p>
+      <label>Open CSV or text <input id="entry-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
+      <div id="ocr-panel"></div>
+      <label for="entry-text">Measurement text</label>
+      <textarea id="entry-text" rows="6" spellcheck="false" placeholder="P1, 1.5, -0.8&#10;P2, 2.0, 1.2"></textarea>
+      <div class="entry-options">
+        <label>Measurements <select id="entry-mode"><option value="offsets">Along / perpendicular</option><option value="distances">Distances from A / B</option></select></label>
+        <label>Input units <select id="entry-unit"><option value="meters">Meters</option><option value="feet">Feet</option></select></label>
+        <label>Apply as <select id="entry-action"><option value="append">Add points</option><option value="replace">Replace existing points</option></select></label>
+        <label>Field separator <select id="entry-delimiter"><option value="auto">Detect separator</option><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="space">Whitespace</option></select></label>
+        <label>Decimal separator <select id="entry-decimal"><option value=".">Point (1.5)</option><option value=",">Comma (1,5)</option></select></label>
+        <label class="checkbox"><input id="entry-header" type="checkbox" /> First row is a header</label>
+        <label>Label column <input id="entry-label-column" type="number" min="1" max="30" value="1" /></label>
+        <label>Along / A column <input id="entry-first-column" type="number" min="1" max="30" value="2" /></label>
+        <label>Perpendicular / B column <input id="entry-second-column" type="number" min="1" max="30" value="3" /></label>
+      </div>
+      <p class="note">Offsets: positive perpendicular is the canvas-down side of A→B. For A/B distances, choose the side for each row in the review. A and B keep their current scale and positions.</p>
+      <button id="entry-review-button" type="button">Preview measurements</button>
+      <p id="entry-status" role="status" aria-live="polite"></p>
+      <section id="entry-review" hidden>
+        <div class="table-scroll"><table><thead><tr><th>Label</th><th id="entry-first-heading">Along</th><th id="entry-second-heading">Perpendicular</th><th>Side</th><th>Validation</th><th>Action</th></tr></thead><tbody id="entry-rows"></tbody></table></div>
+        <div id="entry-preview" aria-label="Import plot preview"></div>
+        <label id="entry-confirmation" class="checkbox" hidden><input id="entry-checked" type="checkbox" /> I checked every recognized measurement against the image.</label>
+      </section>
+      <button id="entry-apply" type="button" disabled>Apply reviewed points</button>
+    </dialog>
     <script type="module" src="src/app.js"></script>
   </body>
 </html>
