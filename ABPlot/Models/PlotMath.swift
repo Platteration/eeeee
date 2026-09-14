@@ -54,6 +54,32 @@ enum PlotMath {
     /// Minimum horizontal separation (meters) between the tapped A and B.
     static let minWorldABDistance: Float = 0.05
 
+    static func clampToCanvas(_ position: CGPoint, in size: CGSize) -> CGPoint {
+        let insetX = min(22, max(0, size.width / 2))
+        let insetY = min(22, max(0, size.height / 2))
+        return CGPoint(
+            x: min(max(position.x, insetX), max(insetX, size.width - insetX)),
+            y: min(max(position.y, insetY), max(insetY, size.height - insetY))
+        )
+    }
+
+    /// Use the gesture's total translation from the original handle center,
+    /// preserving the offset between the finger and handle throughout the drag.
+    static func draggedPosition(from origin: CGPoint, translation: CGSize, in size: CGSize) -> CGPoint {
+        clampToCanvas(CGPoint(x: origin.x + translation.width, y: origin.y + translation.height), in: size)
+    }
+
+    static func referenceDistances(of point: CGPoint, in document: PlotDocument) -> (a: Double, b: Double)? {
+        guard document.abDistance.isFinite, document.abDistance > 0,
+              let coordinate = abCoordinates(of: point, a: document.pointA, b: document.pointB) else { return nil }
+        let x = coordinate.s * document.abDistance
+        let y = coordinate.t * document.abDistance
+        let a = hypot(x, y)
+        let b = hypot(x - document.abDistance, y)
+        guard a.isFinite, b.isFinite else { return nil }
+        return (a, b)
+    }
+
     /// Normalized (s, t) coordinates of `p` in the frame defined by canvas
     /// points `a` and `b`. Returns nil when A and B are (nearly) coincident.
     static func abCoordinates(of p: CGPoint, a: CGPoint, b: CGPoint) -> (s: Double, t: Double)? {
