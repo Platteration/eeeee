@@ -9,16 +9,51 @@ final class PlotViewModel: ObservableObject {
 
     private let saveURL: URL
     private var nextLabelNumber: Int
+    private struct Snapshot: Equatable {
+        var document: PlotDocument
+        var nextLabelNumber: Int
+    }
+    private var savedSnapshot: Snapshot
+    @Published private var undoHistory: [Snapshot] = []
+    @Published private var redoHistory: [Snapshot] = []
+    private let historyLimit = 100
 
-    init() {
+    init(saveURL: URL? = nil) {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        saveURL = documents.appendingPathComponent("plot.json")
-        let loaded = (try? Data(contentsOf: saveURL)).flatMap {
+        let resolvedURL = saveURL ?? documents.appendingPathComponent("plot.json")
+        self.saveURL = resolvedURL
+        let loaded = (try? Data(contentsOf: resolvedURL)).flatMap {
             try? JSONDecoder().decode(PlotDocument.self, from: $0)
         }
         let doc = loaded ?? .default
         self.doc = doc
         nextLabelNumber = (doc.points.compactMap { Int($0.label) }.max() ?? 0) + 1
+        savedSnapshot = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
+    }
+
+    var canUndo: Bool { !undoHistory.isEmpty }
+    var canRedo: Bool { !redoHistory.isEmpty }
+
+    func undo() {
+        save() // Finish any in-flight drag before navigating history.
+        guard let previous = undoHistory.popLast() else { return }
+        redoHistory.append(savedSnapshot)
+        restore(previous)
+    }
+
+    func redo() {
+        save()
+        guard let next = redoHistory.popLast() else { return }
+        undoHistory.append(savedSnapshot)
+        restore(next)
+    }
+
+    private func restore(_ snapshot: Snapshot) {
+        doc = snapshot.document
+        nextLabelNumber = snapshot.nextLabelNumber
+        savedSnapshot = snapshot
+        selectedPointID = nil
+        persist()
     }
 
     var canEnterAR: Bool {
@@ -92,6 +127,18 @@ final class PlotViewModel: ObservableObject {
     }
 
     private func save() {
+        let current = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
+        guard current != savedSnapshot else { return }
+        undoHistory.append(savedSnapshot)
+        if undoHistory.count > historyLimit {
+            undoHistory.removeFirst(undoHistory.count - historyLimit)
+        }
+        redoHistory.removeAll()
+        savedSnapshot = current
+        persist()
+    }
+
+    private func persist() {
         do {
             let data = try JSONEncoder().encode(doc)
             try data.write(to: saveURL, options: .atomic)

@@ -38,6 +38,25 @@ struct PlotEditorView: View {
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
         .toolbar {
+            ToolbarItemGroup(placement: .navigationBarLeading) {
+                Button {
+                    distanceFieldFocused = false
+                    viewModel.undo()
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(!viewModel.canUndo)
+                .keyboardShortcut("z", modifiers: .command)
+
+                Button {
+                    distanceFieldFocused = false
+                    viewModel.redo()
+                } label: {
+                    Label("Redo", systemImage: "arrow.uturn.forward")
+                }
+                .disabled(!viewModel.canRedo)
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") { distanceFieldFocused = false }
@@ -49,7 +68,7 @@ struct PlotEditorView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This cannot be undone. A, B, and your distance will be kept.")
+            Text("A, B, and your distance will be kept. Use Undo to restore cleared points.")
         }
     }
 

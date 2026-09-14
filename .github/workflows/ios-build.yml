@@ -16,6 +16,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Show Xcode version
         run: xcodebuild -version
+      - name: Check undo and redo behavior
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/ViewModels/PlotViewModel.swift Tests/HistoryChecks.swift -o "$RUNNER_TEMP/history-checks"
+          "$RUNNER_TEMP/history-checks"
       - name: Build for iOS Simulator
         run: >-
           xcodebuild -project ABPlot.xcodeproj

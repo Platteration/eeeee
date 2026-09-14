@@ -23,6 +23,10 @@ iOS 16+, iPhone only.
 - The editor explains what is needed before entering AR: a positive distance,
   separated A/B handles, and at least one plotted point.
 - **Clear all points** asks for confirmation and keeps A, B, and the distance.
+- **Undo** and **Redo** recover point additions, deletions, whole drags, clearing,
+  and distance/unit edits. External keyboards support Command-Z and
+  Shift-Command-Z. The last 100 edits are available during the current session;
+  the restored plot autosaves, but history starts fresh on relaunch.
 
 ### 2. AR mode
 - Tap **View in AR** (enabled once you have at least one point and a valid

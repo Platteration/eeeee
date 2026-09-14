@@ -1,0 +1,95 @@
+import Foundation
+import CoreGraphics
+
+/// Run against the production model on macOS without an iPhone or signing team.
+@main
+struct HistoryChecks {
+    @MainActor
+    static func main() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ABPlot-history-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("plot.json")
+        let model = PlotViewModel(saveURL: url)
+        let initial = model.doc
+        precondition(!model.canUndo && !model.canRedo)
+
+        model.addPoint(at: CGPoint(x: 150, y: 200))
+        let first = model.doc
+        let id = first.points[0].id
+        model.undo()
+        precondition(model.doc == initial && model.canRedo)
+        model.redo()
+        precondition(model.doc == first && !model.canRedo)
+
+        // Many drag updates must undo in a single step.
+        model.movePoint(id: id, to: CGPoint(x: 170, y: 210))
+        model.movePoint(id: id, to: CGPoint(x: 190, y: 220))
+        model.endDrag()
+        let moved = model.doc
+        model.undo()
+        precondition(model.doc == first)
+        model.redo()
+        precondition(model.doc == moved)
+
+        // A gesture with no change must preserve the redo stack.
+        model.undo()
+        model.movePoint(id: id, to: first.points[0].position)
+        model.endDrag()
+        precondition(model.canRedo)
+        model.redo()
+
+        model.moveA(to: CGPoint(x: 20, y: 30))
+        model.moveA(to: CGPoint(x: 40, y: 50))
+        model.endDrag()
+        model.undo()
+        precondition(model.doc == moved)
+        model.moveB(to: CGPoint(x: 80, y: 90))
+        model.endDrag()
+        precondition(!model.canRedo)
+        model.undo()
+        precondition(model.doc == moved)
+
+        model.selectedPointID = id
+        model.deleteSelectedPoint()
+        precondition(model.doc.points.isEmpty)
+        model.undo()
+        precondition(model.doc == moved && model.selectedPointID == nil)
+
+        model.clearAllPoints()
+        model.undo()
+        precondition(model.doc == moved)
+        model.addPoint(at: .zero)
+        precondition(model.doc.points.map(\.label) == ["1", "2"])
+        precondition(!model.canRedo)
+
+        let beforeUnits = model.doc
+        model.setUnit(.feet)
+        precondition(abs(model.doc.abDistanceMeters - beforeUnits.abDistanceMeters) < 1e-10)
+        model.undo()
+        precondition(model.doc == beforeUnits)
+        model.redo()
+        precondition(model.doc.unit == .feet)
+        model.setDistance(12)
+        model.undo()
+        precondition(abs(model.doc.abDistanceMeters - beforeUnits.abDistanceMeters) < 1e-10)
+        model.setDistance(.infinity)
+        precondition(model.canRedo)
+
+        // Restoring history must update autosave; relaunch starts fresh history.
+        let reloaded = PlotViewModel(saveURL: url)
+        precondition(reloaded.doc == model.doc)
+        precondition(!reloaded.canUndo && !reloaded.canRedo)
+
+        let bounded = PlotViewModel(saveURL: directory.appendingPathComponent("bounded.json"))
+        for value in 3...107 { bounded.setDistance(Double(value)) }
+        var undoCount = 0
+        while bounded.canUndo { bounded.undo(); undoCount += 1 }
+        precondition(undoCount == 100 && bounded.doc.abDistance == 7)
+        var redoCount = 0
+        while bounded.canRedo { bounded.redo(); redoCount += 1 }
+        precondition(redoCount == 100 && bounded.doc.abDistance == 107)
+        print("History checks passed: edits, drag grouping, redo invalidation, labels, units, persistence, and history limit")
+    }
+}
