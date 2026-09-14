@@ -6,19 +6,55 @@ import Foundation
 final class PlotViewModel: ObservableObject {
     @Published var doc: PlotDocument
     @Published var selectedPointID: UUID?
+    @Published private(set) var saveError: String?
 
     private let saveURL: URL
     private var nextLabelNumber: Int
+    private struct Snapshot: Equatable {
+        var document: PlotDocument
+        var nextLabelNumber: Int
+    }
+    private var savedSnapshot: Snapshot
+    @Published private var undoHistory: [Snapshot] = []
+    @Published private var redoHistory: [Snapshot] = []
+    private let historyLimit = 100
 
-    init() {
+    init(saveURL: URL? = nil) {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        saveURL = documents.appendingPathComponent("plot.json")
-        let loaded = (try? Data(contentsOf: saveURL)).flatMap {
+        let resolvedURL = saveURL ?? documents.appendingPathComponent("plot.json")
+        self.saveURL = resolvedURL
+        let loaded = (try? Data(contentsOf: resolvedURL)).flatMap {
             try? JSONDecoder().decode(PlotDocument.self, from: $0)
         }
         let doc = loaded ?? .default
         self.doc = doc
         nextLabelNumber = (doc.points.compactMap { Int($0.label) }.max() ?? 0) + 1
+        savedSnapshot = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
+    }
+
+    var canUndo: Bool { !undoHistory.isEmpty }
+    var canRedo: Bool { !redoHistory.isEmpty }
+
+    func undo() {
+        save() // Finish any in-flight drag before navigating history.
+        guard let previous = undoHistory.popLast() else { return }
+        redoHistory.append(savedSnapshot)
+        restore(previous)
+    }
+
+    func redo() {
+        save()
+        guard let next = redoHistory.popLast() else { return }
+        undoHistory.append(savedSnapshot)
+        restore(next)
+    }
+
+    private func restore(_ snapshot: Snapshot) {
+        doc = snapshot.document
+        nextLabelNumber = snapshot.nextLabelNumber
+        savedSnapshot = snapshot
+        selectedPointID = nil
+        persist()
     }
 
     var canEnterAR: Bool {
@@ -62,6 +98,47 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
+    func retrySaving() {
+        save()
+    }
+
+    /// Apply one uniform scale and translation to every canvas position.
+    /// The declared distance and coordinates relative to A/B stay unchanged.
+    func fitPlot(in size: CGSize) {
+        let padding: CGFloat = 28
+        guard size.width.isFinite, size.height.isFinite,
+              size.width > padding * 2, size.height > padding * 2 else { return }
+        let positions = [doc.pointA, doc.pointB] + doc.points.map(\.position)
+        guard positions.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return }
+        let minX = positions.map(\.x).min()!
+        let maxX = positions.map(\.x).max()!
+        let minY = positions.map(\.y).min()!
+        let maxY = positions.map(\.y).max()!
+        let width = maxX - minX
+        let height = maxY - minY
+        guard width.isFinite, height.isFinite else { return }
+        let scaleX = width > 0 ? (size.width - padding * 2) / width : .infinity
+        let scaleY = height > 0 ? (size.height - padding * 2) / height : .infinity
+        let scale = width == 0 && height == 0 ? 1 : min(scaleX, scaleY)
+        guard scale.isFinite, scale > 0 else { return }
+        let center = CGPoint(x: minX + width / 2, y: minY + height / 2)
+        func fitted(_ position: CGPoint) -> CGPoint {
+            CGPoint(x: (position.x - center.x) * scale + size.width / 2,
+                    y: (position.y - center.y) * scale + size.height / 2)
+        }
+        // Repeated fitting can differ only by floating-point rounding.
+        guard positions.contains(where: {
+            let next = fitted($0)
+            return abs(next.x - $0.x) > 0.001 || abs(next.y - $0.y) > 0.001
+        }) else { return }
+        doc.pointA = fitted(doc.pointA)
+        doc.pointB = fitted(doc.pointB)
+        for index in doc.points.indices {
+            doc.points[index].position = fitted(doc.points[index].position)
+        }
+        save()
+    }
+
     func deleteSelectedPoint() {
         guard let id = selectedPointID else { return }
         doc.points.removeAll { $0.id == id }
@@ -92,10 +169,27 @@ final class PlotViewModel: ObservableObject {
     }
 
     private func save() {
+        let current = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
+        guard current != savedSnapshot else {
+            if saveError != nil { persist() }
+            return
+        }
+        undoHistory.append(savedSnapshot)
+        if undoHistory.count > historyLimit {
+            undoHistory.removeFirst(undoHistory.count - historyLimit)
+        }
+        redoHistory.removeAll()
+        savedSnapshot = current
+        persist()
+    }
+
+    private func persist() {
         do {
             let data = try JSONEncoder().encode(doc)
             try data.write(to: saveURL, options: .atomic)
+            saveError = nil
         } catch {
+            saveError = error.localizedDescription
             print("ABPlot: failed to save plot: \(error)")
         }
     }

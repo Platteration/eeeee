@@ -22,6 +22,7 @@ struct ARPlotView: View {
         }
         .onAppear {
             session.declaredSpanMeters = document.abDistanceMeters
+            session.displayUnit = document.unit
         }
     }
 
@@ -122,6 +123,8 @@ struct ARPlotView: View {
                         .padding(8)
                         .background(.ultraThinMaterial, in: Circle())
                 }
+                .accessibilityLabel("Rotate left one degree")
+                .disabled(session.yawOffsetDegrees <= -180)
 
                 Slider(
                     value: Binding(
@@ -130,6 +133,8 @@ struct ARPlotView: View {
                     ),
                     in: -180...180
                 )
+                .accessibilityLabel("Plot rotation")
+                .accessibilityValue("\(Int(session.yawOffsetDegrees)) degrees")
 
                 Button {
                     session.setRotation(degrees: session.yawOffsetDegrees + 1)
@@ -138,10 +143,20 @@ struct ARPlotView: View {
                         .padding(8)
                         .background(.ultraThinMaterial, in: Circle())
                 }
+                .accessibilityLabel("Rotate right one degree")
+                .disabled(session.yawOffsetDegrees >= 180)
             }
 
-            Text(String(format: "Rotation %+.0f°", session.yawOffsetDegrees))
-                .font(.caption2.monospacedDigit())
+            HStack {
+                Text(String(format: "Rotation %+.0f°", session.yawOffsetDegrees))
+                    .font(.caption2.monospacedDigit())
+                Spacer()
+                Button("Reset rotation") {
+                    session.setRotation(degrees: 0)
+                }
+                .font(.caption)
+                .disabled(session.yawOffsetDegrees == 0)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
