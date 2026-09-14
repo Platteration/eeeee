@@ -132,10 +132,13 @@
             Label points with their measurements on SVG and PNG exports
           </label>
           <p class="note">
-            JSON matches the ABPlot iOS app's <code>plot.json</code>. Copy it into the app's folder in the
-            Files app, replacing that file, to place this plot in AR.
+            Open exported JSON in the updated iOS app using Plot files &amp; name → Open plot JSON.
+            Names, points, and scale travel with the file. Import an app backup here to continue editing.
           </p>
           <p id="status" class="status" role="status"></p>
+          <p id="save-status" class="status" role="status"></p>
+          <button id="retry-save" type="button" hidden>Retry save</button>
+          <button id="recovery" type="button" hidden>Download previous save for recovery</button>
         </section>
 
         <section class="panel-section">

@@ -26,6 +26,10 @@ export class Store {
   #pending = null;
   #listeners = new Set();
   #storage;
+  #saveError = null;
+  #recoveryText = null;
+  #loadError = null;
+  #hasSaved = false;
 
   constructor({ document: doc = defaultDocument(), storage = null } = {}) {
     this.#doc = clone(doc);
@@ -40,11 +44,33 @@ export class Store {
     const store = new Store({ storage });
     try {
       const saved = storage?.getItem(STORAGE_KEY);
-      if (saved) store.#doc = parseDocument(saved);
+      if (saved) {
+        store.#recoveryText = saved;
+        store.#doc = parseDocument(saved);
+        store.#recoveryText = null;
+        store.#hasSaved = true;
+      }
     } catch (error) {
-      console.warn('ABPlot: ignoring unreadable saved plot:', error.message);
+      store.#loadError = 'The previous saved plot could not be opened. Download its recovery copy before saving over it.';
     }
     return store;
+  }
+
+  get saveError() {
+    return this.#loadError ?? this.#saveError ?? (!this.#storage ? 'Browser storage is unavailable. Export JSON to keep your work.' : null);
+  }
+
+  get recoveryText() { return this.#recoveryText; }
+  get hasSaved() { return this.#hasSaved; }
+  get needsRecovery() { return this.#loadError !== null; }
+
+  retrySaving(storage = this.#storage, { replaceUnreadable = false } = {}) {
+    this.#storage = storage;
+    // Never overwrite an unreadable autosave until the user has backed it up.
+    if (this.#loadError && !replaceUnreadable) return;
+    this.#recoveryText = null;
+    this.#loadError = null;
+    this.#changed();
   }
 
   get document() {
@@ -124,7 +150,7 @@ export class Store {
   select(id) {
     if (this.#selectedId === id) return;
     this.#selectedId = id;
-    this.#changed();
+    this.#changed(false);
   }
 
   undo() {
@@ -152,18 +178,19 @@ export class Store {
     this.#redo.length = 0;
   }
 
-  #changed() {
-    this.#save();
+  #changed(save = true) {
+    if (save) this.#save();
     for (const listener of this.#listeners) listener(this);
   }
 
   #save() {
-    if (!this.#storage) return;
+    if (!this.#storage || this.#loadError) return;
     try {
       this.#storage.setItem(STORAGE_KEY, JSON.stringify(this.#doc));
+      this.#hasSaved = true;
+      this.#saveError = null;
     } catch (error) {
-      // A full or disabled storage must not take the editor down with it.
-      console.warn('ABPlot: could not save plot:', error.message);
+      this.#saveError = 'Could not autosave. Your latest changes are only in memory. Retry saving or export JSON.';
     }
   }
 }

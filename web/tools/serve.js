@@ -8,7 +8,7 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -35,10 +35,11 @@ export function resolveRequestPath(root, urlPath) {
   } catch {
     return null;
   }
-  if (decoded.includes('\0')) return null;
-  const relative = normalize(decoded).replace(/^(\.\.(\/|\\|$))+/, '');
-  const target = join(root, relative.endsWith('/') || relative === '' ? join(relative, 'index.html') : relative);
-  return target === root || target.startsWith(root + sep) ? target : null;
+  if (/[\\\0:]/.test(decoded) || decoded.split('/').includes('..')) return null;
+  const relative = decoded.replace(/^\/+/, '');
+  const base = resolve(root);
+  const target = resolve(base, relative.endsWith('/') || relative === '' ? join(relative, 'index.html') : relative);
+  return target === base || target.startsWith(base + sep) ? target : null;
 }
 
 const server = createServer(async (request, response) => {

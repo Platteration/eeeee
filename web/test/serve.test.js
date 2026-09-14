@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { resolveRequestPath } from '../tools/serve.js';
 
-const root = '/srv/abplot';
+const root = resolve('test-fixture-root');
 
 describe('resolveRequestPath', () => {
   it('serves index.html for the root and for directories', () => {
@@ -32,4 +32,10 @@ describe('resolveRequestPath', () => {
     assert.equal(resolveRequestPath(root, '/%E0%A4%A'), null);
     assert.equal(resolveRequestPath(root, '/a%00b'), null);
   });
+});
+
+it('rejects Windows separators, drive paths, and alternate streams', () => {
+  for (const path of ['/..%5Cprivate', '/C:/secret', '/app.js:stream', '/sub/../private', '/%5C%5Cserver/share']) {
+    assert.equal(resolveRequestPath(root, path), null);
+  }
 });

@@ -158,3 +158,46 @@ describe('persistence', () => {
     assert.equal(store.document.abDistance, 3);
   });
 });
+
+describe('save recovery', () => {
+  it('surfaces quota errors and clears them after a successful retry', () => {
+    let full = true;
+    const storage = fakeStorage();
+    const set = storage.setItem;
+    storage.setItem = (key, value) => { if (full) throw new Error('quota'); set(key, value); };
+    const store = new Store({ storage });
+    store.apply((d) => { d.abDistance = 9; });
+    assert.match(store.saveError, /Could not autosave/);
+    full = false;
+    store.retrySaving();
+    assert.equal(store.saveError, null);
+    assert.equal(JSON.parse(storage.getItem(STORAGE_KEY)).abDistance, 9);
+    assert.equal(store.hasSaved, true);
+  });
+  it('keeps a corrupt autosave intact until replacement is explicitly requested', () => {
+    const broken = '{bad json';
+    const storage = fakeStorage({ [STORAGE_KEY]: broken });
+    const store = Store.fromStorage(storage);
+    store.apply((d) => { d.abDistance = 8; });
+    store.retrySaving();
+    assert.equal(storage.getItem(STORAGE_KEY), broken);
+    assert.equal(store.recoveryText, broken);
+    assert.equal(store.needsRecovery, true);
+    store.retrySaving(storage, { replaceUnreadable: true });
+    assert.equal(JSON.parse(storage.getItem(STORAGE_KEY)).abDistance, 8);
+    assert.equal(store.saveError, null);
+  });
+  it('does not write merely because selection changes', () => {
+    let writes = 0;
+    const store = new Store({ document: withPoint(), storage: { setItem: () => writes++ } });
+    store.select('p1');
+    store.select(null);
+    assert.equal(writes, 0);
+  });
+  it('reports unavailable storage and recovers when storage becomes available', () => {
+    const store = new Store();
+    assert.match(store.saveError, /unavailable/);
+    store.retrySaving(fakeStorage());
+    assert.equal(store.saveError, null);
+  });
+});

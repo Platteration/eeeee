@@ -21,11 +21,8 @@
  * accepts the friendlier `{"x":…,"y":…}` form, so hand-written or
  * third-party files import without ceremony.
  *
- * One key is ours alone: an optional `name`, which titles the plot and its
- * exports. Swift's `JSONDecoder` ignores keys its struct has no property for,
- * so a named plot still opens on the phone -- it simply forgets the name when
- * it saves. An unnamed plot writes no `name` key at all, leaving the file
- * byte-identical to what the phone produces.
+ * The optional `name` titles the plot and its exports. Updated iOS versions
+ * preserve it; older versions ignore it. An unnamed plot omits the key.
  */
 
 /** Length units, keyed by the raw value Swift's `LengthUnit` encodes. */
@@ -51,6 +48,15 @@ export function abDistanceMeters(doc) {
   return doc.abDistance * UNITS[doc.unit].toMeters;
 }
 
+/** Convert the displayed distance without changing the physical plot. */
+export function changeUnit(doc, unit) {
+  if (!Object.hasOwn(UNITS, unit)) throw new Error('Unknown length unit');
+  const distance = abDistanceMeters(doc) / UNITS[unit].toMeters;
+  if (!Number.isFinite(distance)) throw new Error('The converted distance is too large');
+  doc.abDistance = distance;
+  doc.unit = unit;
+}
+
 /** A fresh uppercase UUID, matching what Swift's `UUID` encodes. */
 export function newId() {
   const uuid =
@@ -66,10 +72,14 @@ export function newId() {
 /** The next free numeric label, mirroring the iOS app's numbering. */
 export function nextLabel(points) {
   const highest = points.reduce((max, point) => {
-    const n = Number.parseInt(point.label, 10);
-    return Number.isInteger(n) && n > max ? n : max;
+    const n = Number(point.label);
+    return Number.isSafeInteger(n) && n > max ? n : max;
   }, 0);
-  return String(highest + 1);
+  if (highest < Number.MAX_SAFE_INTEGER) return String(highest + 1);
+  const used = new Set(points.map((point) => point.label));
+  let candidate = 1;
+  while (used.has(String(candidate))) candidate += 1;
+  return String(candidate);
 }
 
 /** A new plot point at `position`, labelled after the existing `points`. */
@@ -116,7 +126,7 @@ export function parseDocument(input) {
     throw new Error(`Unknown unit ${JSON.stringify(unit)} (expected ${Object.keys(UNITS).join(' or ')})`);
   }
 
-  const abDistance = Number(raw.abDistance);
+  const abDistance = typeof raw.abDistance === 'number' ? raw.abDistance : NaN;
   if (!Number.isFinite(abDistance) || abDistance < 0) {
     throw new Error('abDistance must be a non-negative number');
   }
@@ -124,10 +134,15 @@ export function parseDocument(input) {
   const rawPoints = raw.points === undefined || raw.points === null ? [] : raw.points;
   if (!Array.isArray(rawPoints)) throw new Error('points must be an array');
 
+  const ids = new Set();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const points = rawPoints.map((point, index) => {
     if (!point || typeof point !== 'object') throw new Error(`points[${index}] must be an object`);
+    let id = typeof point.id === 'string' && uuid.test(point.id) ? point.id.toUpperCase() : newId();
+    while (ids.has(id)) id = newId();
+    ids.add(id);
     return {
-      id: typeof point.id === 'string' && point.id ? point.id : newId(),
+      id,
       position: coercePoint(point.position, `points[${index}].position`),
       label: point.label === undefined || point.label === null ? String(index + 1) : String(point.label),
     };

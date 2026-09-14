@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   abDistanceMeters,
+  changeUnit,
   createPoint,
   defaultDocument,
   fileStem,
@@ -136,6 +137,17 @@ describe('labels and ids', () => {
 });
 
 describe('abDistanceMeters', () => {
+  it('switches units without changing geometry or physical measurements, including a round trip', () => {
+    const doc = parseDocument(iosFile);
+    const before = structuredClone(doc);
+    changeUnit(doc, 'meters');
+    assert.equal(doc.abDistance, 2.5 * 0.3048);
+    assert.deepEqual(doc.points, before.points);
+    assert.deepEqual(doc.pointA, before.pointA);
+    changeUnit(doc, 'feet');
+    assert.ok(Math.abs(doc.abDistance - before.abDistance) < 1e-12);
+    assert.throws(() => changeUnit(doc, 'cubits'), /Unknown/);
+  });
   it('converts feet to meters', () => {
     assert.equal(abDistanceMeters({ ...defaultDocument(), abDistance: 10, unit: 'feet' }), 3.048);
     assert.equal(abDistanceMeters({ ...defaultDocument(), abDistance: 10, unit: 'meters' }), 10);
@@ -169,5 +181,27 @@ describe('plot names', () => {
     assert.equal(stem('///'), 'plot');
     assert.equal(fileStem({}), 'plot');
     assert.ok(stem('x'.repeat(200)).length <= 60);
+  });
+});
+
+describe('portable imports', () => {
+  it('repairs invalid and duplicate IDs without losing points, preserving valid IDs', () => {
+    const raw = JSON.parse(iosFile);
+    raw.points[0].id = raw.points[0].id.toLowerCase();
+    raw.points.push({ ...raw.points[1] }, { ...raw.points[0], id: 'legacy-point' });
+    const doc = parseDocument(raw);
+    assert.equal(doc.points.length, 4);
+    assert.equal(new Set(doc.points.map((p) => p.id)).size, 4);
+    for (const p of doc.points) assert.match(p.id, /^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$/);
+    assert.deepEqual(parseDocument(serializeDocument(doc)), doc);
+  });
+  it('rejects empty, null, boolean, and text distances instead of treating them as zero', () => {
+    for (const abDistance of [null, '', false, '3']) {
+      assert.throws(() => parseDocument({ ...JSON.parse(iosFile), abDistance }), /non-negative/);
+    }
+  });
+  it('does not overflow or partially parse point labels', () => {
+    assert.equal(nextLabel([{ label: '99 trees' }, { label: '2' }]), '3');
+    assert.equal(nextLabel([{ label: String(Number.MAX_SAFE_INTEGER) }, { label: '1' }]), '2');
   });
 });
