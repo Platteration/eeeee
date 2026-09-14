@@ -31,3 +31,18 @@ jobs:
           -sdk iphonesimulator
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Check measurement imports
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/MeasurementImport.swift ABPlot/ViewModels/PlotViewModel.swift Tests/ImportChecks.swift -o "$RUNNER_TEMP/import-checks"
+          "$RUNNER_TEMP/import-checks"
+      - name: Check Vision OCR on a printed table
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/MeasurementImport.swift ABPlot/Models/MeasurementOCR.swift Tests/OCRChecks.swift -o "$RUNNER_TEMP/ocr-checks"
+          "$RUNNER_TEMP/ocr-checks"
+      - name: Build for iOS device
+        run: >-
+          xcodebuild -project ABPlot.xcodeproj
+          -target ABPlot -configuration Debug
+          -sdk iphoneos
+          CODE_SIGNING_ALLOWED=NO
+          build
