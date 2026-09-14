@@ -172,3 +172,17 @@ tools/serve.js      dependency-free static server for `npm start`
 
 Everything except `editor.js`, `app.js` and the `download*` helpers is free of
 the DOM, which is why the suite runs in plain Node with nothing installed.
+
+## Browser regression checks
+
+The runtime still has no dependencies or build step. Development-only browser
+checks use Playwright; `npm test` runs the pure Node tests without an install.
+To run the browser suite, use `npm ci`, `npx playwright install`, then
+`npm run test:browser`. CI runs Chromium, Firefox, and mobile WebKit, covering
+keyboard deletion, coordinate entry and tab order, native text undo, canceled
+touches, interrupted drag recovery, JSON import/export, CSV/SVG/PNG downloads,
+failed-save retry, and the narrow layout.
+
+Dragging saves once on release or interruption, and remains one Undo step.
+Canceled touches and Shift-clicks do not create points. Canvas markers have
+44-pixel hit areas at every zoom, and touch-device form controls are larger.

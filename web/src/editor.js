@@ -61,10 +61,16 @@ export class PlotEditor extends EventTarget {
     svg.addEventListener('pointerdown', this.#onPointerDown);
     svg.addEventListener('pointermove', this.#onPointerMove);
     svg.addEventListener('pointerup', this.#onPointerUp);
-    svg.addEventListener('pointercancel', this.#onPointerUp);
+    svg.addEventListener('pointercancel', this.#onPointerCancel);
+    svg.addEventListener('lostpointercapture', this.#onPointerCancel);
     svg.addEventListener('pointerleave', this.#onPointerLeave);
     svg.addEventListener('wheel', this.#onWheel, { passive: false });
     svg.addEventListener('contextmenu', (event) => event.preventDefault());
+    window.addEventListener('blur', () => this.finishGesture());
+    window.addEventListener('pagehide', () => this.finishGesture());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.finishGesture();
+    });
 
     store.subscribe(() => this.render());
     new ResizeObserver(() => this.render()).observe(svg);
@@ -165,7 +171,8 @@ export class PlotEditor extends EventTarget {
     this.#capture(event.pointerId);
 
     if (event.button === 1 || event.shiftKey || !role) {
-      this.#gesture = { kind: 'background', pointerId: event.pointerId, start, moved: false };
+      this.#gesture = { kind: 'background', pointerId: event.pointerId, start, moved: false,
+        panOnly: event.button === 1 || event.shiftKey };
       return;
     }
 
@@ -260,7 +267,7 @@ export class PlotEditor extends EventTarget {
     if (this.#svg.hasPointerCapture(event.pointerId)) this.#svg.releasePointerCapture(event.pointerId);
 
     if (gesture.kind === 'background') {
-      if (gesture.moved || event.button === 1) return;
+      if (gesture.moved || gesture.panOnly) return;
       // A click on empty canvas: deselect if something is selected, otherwise
       // add a point -- the same rule the iOS editor uses for a tap.
       if (this.#store.selectedId !== null) {
@@ -276,6 +283,22 @@ export class PlotEditor extends EventTarget {
 
     this.#store.end();
     if (!gesture.moved && gesture.kind === 'point' && gesture.wasSelected) this.#store.select(null);
+  };
+
+  /** Finish a move without interpreting interruption as a tap or deselection. */
+  finishGesture() {
+    const ids = [...this.#pointers.keys()];
+    this.#gesture = null;
+    this.#pinch = null;
+    this.#pointers.clear();
+    this.#store.end();
+    for (const id of ids) {
+      if (this.#svg.hasPointerCapture(id)) this.#svg.releasePointerCapture(id);
+    }
+  }
+
+  #onPointerCancel = (event) => {
+    if (this.#pointers.has(event.pointerId)) this.finishGesture();
   };
 
   /**
@@ -440,6 +463,8 @@ export class PlotEditor extends EventTarget {
         'data-id': point.id,
         class: selected ? 'point selected' : 'point',
       });
+      group.append(el('circle', { cx: point.position.x, cy: point.position.y, r: 22 * px,
+        fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r, class: 'point-dot' }));
       group.append(
         el('circle', {
@@ -477,6 +502,8 @@ export class PlotEditor extends EventTarget {
       ['B', doc.pointB],
     ]) {
       const group = el('g', { 'data-role': 'handle', 'data-handle': name, class: `handle handle-${name}` });
+      group.append(el('circle', { cx: position.x, cy: position.y, r: 22 * px,
+        fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: position.x, cy: position.y, r, class: 'handle-dot' }));
       group.append(
         el('circle', { cx: position.x, cy: position.y, r, class: 'handle-ring', 'stroke-width': 2 * px }),

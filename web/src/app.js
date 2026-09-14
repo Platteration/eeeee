@@ -193,21 +193,25 @@ function renderHead(columns) {
  */
 function captureTableFocus() {
   const active = document.activeElement;
-  if (!active || !ui.tableBody.contains(active) || !active.dataset.row) return null;
+  if (!active || !ui.tableBody.contains(active)) return null;
+  const row = active.dataset.row ?? active.closest('tr')?.dataset.id;
+  if (!row) return null;
   return {
-    row: active.dataset.row,
-    column: active.dataset.column,
-    start: active.selectionStart,
-    end: active.selectionEnd,
+    row,
+    column: active.dataset.column ?? (active.matches('button') ? 'delete' : 'row'),
+    start: active.selectionStart ?? null,
+    end: active.selectionEnd ?? null,
+    value: active.matches('input') ? active.value : null,
   };
 }
 
 function restoreTableFocus(focus) {
   if (!focus) return;
-  const input = ui.tableBody.querySelector(
-    `[data-row="${CSS.escape(focus.row)}"][data-column="${CSS.escape(focus.column)}"]`,
-  );
+  const row = ui.tableBody.querySelector(`tr[data-id="${CSS.escape(focus.row)}"]`);
+  const input = focus.column === 'row' ? row : focus.column === 'delete' ? row?.querySelector('button')
+    : row?.querySelector(`[data-column="${CSS.escape(focus.column)}"]`);
   if (!input) return;
+  if (focus.value !== null && input.matches('input')) input.value = focus.value;
   input.focus();
   if (focus.start !== null) input.setSelectionRange(focus.start, focus.end);
 }
@@ -221,7 +225,9 @@ function measureInput(row, column, text) {
   input.value = text;
   input.inputMode = 'decimal';
   input.setAttribute('aria-label', `${column.head} for point ${row.label}`);
-  input.addEventListener('change', () => {
+  let committedValue = text;
+  const commit = () => {
+    if (input.value === committedValue) return;
     const entered = input.value.trim();
     // Read "1,5" as 1.5: the app writes a decimal point, but a comma is what
     // half the world's keyboards and tape measures say.
@@ -232,9 +238,13 @@ function measureInput(row, column, text) {
       setStatus(`“${entered}” is not a distance.`, 'error');
       return;
     }
+    committedValue = input.value;
     moveTo(row, column.key, typed);
-  });
+  };
+  input.addEventListener('change', commit);
+  input.addEventListener('blur', commit);
   input.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab' || event.key === 'Enter') commit();
     if (event.key === 'Enter') input.blur();
     if (event.key === 'Escape') {
       input.value = text;
@@ -248,7 +258,11 @@ function measureInput(row, column, text) {
 /** Move a point so that its `along` or `perp` reads `value` in the doc's unit. */
 function moveTo(row, key, value) {
   const doc = store.document;
-  const offsets = { along: row.along, perp: row.perp, [key]: toMeters(value, doc.unit) };
+  // A previous cell may have committed before the next animation frame draws
+  // its replacement. Always preserve the other coordinate from current state.
+  const current = measurePoints(doc).find((point) => point.id === row.id);
+  if (!current) return;
+  const offsets = { along: current.along, perp: current.perp, [key]: toMeters(value, doc.unit) };
   const position = positionForOffsets(doc, offsets);
   if (!position) return;
   store.apply((draft) => {
@@ -329,6 +343,7 @@ function renderTable(doc) {
       store.select(row.id === store.selectedId ? null : row.id);
     });
     tr.addEventListener('keydown', (event) => {
+      if (event.target !== tr) return;
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         store.select(row.id);
@@ -357,16 +372,28 @@ function renderScaleBar(bar) {
   ui.scaleBarLabel.textContent = bar.label;
 }
 
+let tableRenderPending = false;
+function scheduleTableRender() {
+  if (tableRenderPending) return;
+  tableRenderPending = true;
+  // Finish the browser's blur/change/Tab sequence before replacing cells.
+  // Coalescing renders also avoids rebuilding the table several times per frame.
+  requestAnimationFrame(() => {
+    tableRenderPending = false;
+    renderTable(store.document);
+  });
+}
+
 function render() {
   const doc = store.document;
-  ui.saveStatus.textContent = store.saveError ?? (store.hasSaved
+  ui.saveStatus.textContent = store.saveError ?? (store.isEditing ? 'Editing… saves when you release the point.' : store.hasSaved
     ? 'Saved in this browser. Export JSON for a portable backup.' : 'Autosave ready. Export JSON for a portable backup.');
   ui.saveStatus.dataset.tone = store.saveError ? 'error' : 'ok';
   ui.retrySave.hidden = !store.saveError;
   ui.retrySave.textContent = store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
   ui.recovery.hidden = store.recoveryText === null;
   renderScale(doc);
-  renderTable(doc);
+  scheduleTableRender();
   ui.undo.disabled = !store.canUndo;
   ui.redo.disabled = !store.canRedo;
   renderSheetNote();
@@ -449,8 +476,8 @@ ui.recovery.addEventListener('click', () => {
   setStatus('Recovery download requested. When you have saved it, choose Replace previous autosave to resume saving.');
 });
 
-ui.undo.addEventListener('click', () => store.undo());
-ui.redo.addEventListener('click', () => store.redo());
+ui.undo.addEventListener('click', () => { editor.finishGesture(); store.undo(); });
+ui.redo.addEventListener('click', () => { editor.finishGesture(); store.redo(); });
 ui.fit.addEventListener('click', () => editor.fit());
 ui.zoomIn.addEventListener('click', () => editor.zoomBy(1.3));
 ui.zoomOut.addEventListener('click', () => editor.zoomBy(1 / 1.3));
@@ -588,21 +615,25 @@ for (const type of ['dragover', 'drop']) {
 
 document.addEventListener('keydown', (event) => {
   const target = event.target;
-  const typing = target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
+  const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName));
+  if (typing || event.isComposing) return;
 
   const modifier = event.metaKey || event.ctrlKey;
   if (modifier && event.key.toLowerCase() === 'z') {
     event.preventDefault();
+    editor.finishGesture();
     if (event.shiftKey) store.redo();
     else store.undo();
     return;
   }
   if (modifier && event.key.toLowerCase() === 'y') {
     event.preventDefault();
+    editor.finishGesture();
     store.redo();
     return;
   }
-  if (typing) return;
+  // Arrow keys, Space and Enter on native buttons belong to those controls.
+  if (target instanceof HTMLElement && target.closest('button, a')) return;
 
   const selected = store.selectedPoint;
   switch (event.key) {
