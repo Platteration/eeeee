@@ -26,6 +26,8 @@
  */
 
 /** Length units, keyed by the raw value Swift's `LengthUnit` encodes. */
+import { validateGeometry } from './validation.js';
+
 export const UNITS = {
   meters: { symbol: 'm', label: 'Meters', toMeters: 1 },
   feet: { symbol: 'ft', label: 'Feet', toMeters: 0.3048 },
@@ -148,18 +150,19 @@ export function parseDocument(input) {
     };
   });
 
-  return {
+  return validateGeometry({
     name: raw.name === undefined || raw.name === null ? '' : String(raw.name),
     pointA: coercePoint(raw.pointA, 'pointA'),
     pointB: coercePoint(raw.pointB, 'pointB'),
     abDistance,
     unit,
     points,
-  };
+  });
 }
 
 /** The document as a plain object in the iOS wire format (CGPoints as arrays). */
 export function toWireFormat(doc) {
+  validateGeometry(doc);
   return {
     // Omitted when empty, so an unnamed plot is byte-identical to the phone's.
     ...(doc.name ? { name: doc.name } : {}),

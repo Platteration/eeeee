@@ -93,7 +93,8 @@ export function measurePoints(doc, reference = null) {
 export function positionForOffsets(doc, { along, perp }) {
   if (!isMeasurable(doc)) return null;
   const abMeters = abDistanceMeters(doc);
-  return canvasPoint({ s: along / abMeters, t: perp / abMeters }, doc.pointA, doc.pointB);
+  const position = canvasPoint({ s: along / abMeters, t: perp / abMeters }, doc.pointA, doc.pointB);
+  return Number.isFinite(position.x) && Number.isFinite(position.y) ? position : null;
 }
 
 /**

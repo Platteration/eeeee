@@ -59,10 +59,13 @@ export function abGrid(doc, box, minSpacing) {
     const q = canvasPoint(to, doc.pointA, doc.pointB);
     lines.push({ x1: p.x, y1: p.y, x2: q.x, y2: q.y, axis });
   };
-  for (let i = Math.ceil(s.min / step); i * step <= s.max; i += 1) {
+  if (![s.min / step, s.max / step, t.min / step, t.max / step].every(n => Number.isSafeInteger(Math.ceil(n)))) return null;
+  let count = 0;
+  for (let i = Math.ceil(s.min / step); i * step <= s.max && count++ < MAX_GRID_LINES; i += 1) {
     push({ s: i * step, t: t.min }, { s: i * step, t: t.max }, i === 0);
   }
-  for (let i = Math.ceil(t.min / step); i * step <= t.max; i += 1) {
+  count = 0;
+  for (let i = Math.ceil(t.min / step); i * step <= t.max && count++ < MAX_GRID_LINES; i += 1) {
     push({ s: s.min, t: i * step }, { s: s.max, t: i * step }, i === 0);
   }
   return { lines, stepMeters };
