@@ -28,7 +28,7 @@ final class PlotViewModel: ObservableObject {
         }
         let doc = loaded ?? .default
         self.doc = doc
-        nextLabelNumber = (doc.points.compactMap { Int($0.label) }.max() ?? 0) + 1
+        nextLabelNumber = Self.nextLabel(in: doc)
         savedSnapshot = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
     }
 
@@ -77,7 +77,7 @@ final class PlotViewModel: ObservableObject {
 
     func addPoint(at position: CGPoint) {
         doc.points.append(PlotPoint(id: UUID(), position: position, label: String(nextLabelNumber)))
-        nextLabelNumber += 1
+        nextLabelNumber = Self.nextLabel(in: doc)
         save()
     }
 
@@ -103,7 +103,22 @@ final class PlotViewModel: ObservableObject {
     func importMeasurements(_ document: PlotDocument) {
         doc = document
         selectedPointID = nil
-        nextLabelNumber = (document.points.compactMap { Int($0.label) }.max() ?? 0) + 1
+        nextLabelNumber = Self.nextLabel(in: document)
+        save()
+    }
+
+    private static func nextLabel(in document: PlotDocument) -> Int {
+        let highest = document.points.compactMap { Int($0.label) }.filter { $0 > 0 }.max() ?? 0
+        if highest < Int.max { return highest + 1 }
+        let used = Set(document.points.map(\.label))
+        var candidate = 1
+        while used.contains(String(candidate)) { candidate += 1 }
+        return candidate
+    }
+
+    func setName(_ name: String) {
+        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        doc.name = trimmed.isEmpty ? nil : trimmed
         save()
     }
 

@@ -132,3 +132,18 @@ ABPlot/
   AR/                   AR placement state machine, ARView container,
                         entity factory, AR screen
 ```
+
+## Portable plot files
+
+In the editor's options menu, choose **Plot files & name** to name the plot,
+open a JSON file from the browser companion, or save a portable backup to Files.
+Imports show the name, point count, and baseline before you choose **Replace
+current plot**. Undo restores the previous plot. Files retain names, units,
+reference positions, point labels, and UUIDs; legacy unnamed files still open.
+Use **Fit plot to screen** after importing a plot drawn on a larger display.
+Invalid JSON, duplicate IDs, non-finite coordinates, negative distances, and
+files over 5 MB are rejected before replacing your work.
+
+The JSON regression checks cover browser-format round trips, legacy files,
+validation, import undo/redo, named autosave, and large numeric point labels.
+Physical-device Files picker and AR placement still require an iPhone smoke test.

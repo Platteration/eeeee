@@ -10,6 +10,7 @@ struct PlotEditorView: View {
     @State private var exportFile = PlotCSVFile(text: "")
     @State private var exportError: String?
     @State private var showingMeasurementImport = false
+    @State private var showingPlotFiles = false
 
     private static let canvasSpace = "canvas"
 
@@ -45,6 +46,7 @@ struct PlotEditorView: View {
             .onChange(of: geo.size) { canvasSize = $0 }
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
+        .sheet(isPresented: $showingPlotFiles) { PlotFilesView(initialName: viewModel.doc.name) }
         .sheet(isPresented: $showingMeasurementImport) {
             MeasurementImportView(canvasSize: canvasSize,
                                   initialDistance: viewModel.doc.abDistance, initialUnit: viewModel.doc.unit) {
@@ -217,6 +219,12 @@ struct PlotEditorView: View {
                 }
 
                 Menu {
+                    Button {
+                        distanceFieldFocused = false
+                        showingPlotFiles = true
+                    } label: {
+                        Label("Plot files & name", systemImage: "folder")
+                    }
                     Button {
                         distanceFieldFocused = false
                         showingMeasurementImport = true
