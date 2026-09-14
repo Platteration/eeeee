@@ -1,0 +1,25 @@
+name: iOS build
+
+on:
+  push:
+    branches: ["claude/ios-ab-plotting-ar-232m3z"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Build for iOS Simulator
+        run: >-
+          xcodebuild -project ABPlot.xcodeproj
+          -target ABPlot -configuration Debug
+          -sdk iphonesimulator
+          CODE_SIGNING_ALLOWED=NO
+          build

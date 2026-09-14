@@ -350,13 +350,14 @@ struct ARViewContainer: UIViewRepresentable {
 
         // MARK: ARCoachingOverlayViewDelegate
 
-        // Left main-actor isolated (not `nonisolated`): UIKit/ARKit delegates are
-        // @MainActor in the Xcode 16 SDK, and this is always called on the main
-        // thread anyway. `updateReticle` also leaves the scanning phase on its
-        // own, so the flow survives even if this never fires.
-        func coachingOverlayViewDidDeactivate(_ coachingOverlayView: ARCoachingOverlayView) {
-            if session.phase == .searchingForPlane {
-                session.phase = .waitingForA
+        // The delegate requirement is nonisolated in the Xcode 16.4 SDK.
+        // Hop to the main actor before touching observable placement state.
+        nonisolated func coachingOverlayViewDidDeactivate(_ coachingOverlayView: ARCoachingOverlayView) {
+            Task { @MainActor [weak self] in
+                guard let self, self.arView != nil else { return }
+                if self.session.phase == .searchingForPlane {
+                    self.session.phase = .waitingForA
+                }
             }
         }
     }

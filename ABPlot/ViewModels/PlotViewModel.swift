@@ -22,10 +22,21 @@ final class PlotViewModel: ObservableObject {
     }
 
     var canEnterAR: Bool {
-        guard !doc.points.isEmpty, doc.abDistance > 0 else { return false }
+        arUnavailableReason == nil
+    }
+
+    var arUnavailableReason: String? {
+        guard doc.abDistance.isFinite, doc.abDistance > 0,
+              doc.abDistanceMeters.isFinite,
+              Float(doc.abDistanceMeters).isFinite else {
+            return "Enter a positive A–B distance."
+        }
         let dx = doc.pointB.x - doc.pointA.x
         let dy = doc.pointB.y - doc.pointA.y
-        return dx * dx + dy * dy > PlotMath.minCanvasABDistance * PlotMath.minCanvasABDistance
+        guard dx * dx + dy * dy > PlotMath.minCanvasABDistance * PlotMath.minCanvasABDistance else {
+            return "Move A and B farther apart."
+        }
+        return doc.points.isEmpty ? "Tap the canvas to add your first point." : nil
     }
 
     func addPoint(at position: CGPoint) {
@@ -66,11 +77,16 @@ final class PlotViewModel: ObservableObject {
     }
 
     func setDistance(_ distance: Double) {
+        guard distance.isFinite else { return }
         doc.abDistance = distance
         save()
     }
 
     func setUnit(_ unit: LengthUnit) {
+        guard unit != doc.unit else { return }
+        let convertedDistance = doc.abDistanceMeters / unit.toMeters
+        guard convertedDistance.isFinite else { return }
+        doc.abDistance = convertedDistance
         doc.unit = unit
         save()
     }

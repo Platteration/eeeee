@@ -18,6 +18,11 @@ iOS 16+, iPhone only.
 - Enter the real-world A–B distance and pick meters or feet in the bottom bar.
   This distance defines the scale of the whole plot.
 - The plot autosaves and is restored on relaunch.
+- Switching between meters and feet converts the distance, preserving the
+  real-world scale. Use **Done** above the decimal keyboard to finish editing.
+- The editor explains what is needed before entering AR: a positive distance,
+  separated A/B handles, and at least one plotted point.
+- **Clear all points** asks for confirmation and keeps A, B, and the distance.
 
 ### 2. AR mode
 - Tap **View in AR** (enabled once you have at least one point and a valid

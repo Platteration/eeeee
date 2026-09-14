@@ -3,6 +3,7 @@ import SwiftUI
 struct PlotEditorView: View {
     @EnvironmentObject private var viewModel: PlotViewModel
     @FocusState private var distanceFieldFocused: Bool
+    @State private var showingClearConfirmation = false
 
     private static let canvasSpace = "canvas"
 
@@ -36,6 +37,20 @@ struct PlotEditorView: View {
             .coordinateSpace(name: Self.canvasSpace)
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { distanceFieldFocused = false }
+            }
+        }
+        .confirmationDialog("Clear all plotted points?", isPresented: $showingClearConfirmation, titleVisibility: .visible) {
+            Button("Clear all points", role: .destructive) {
+                viewModel.clearAllPoints()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This cannot be undone. A, B, and your distance will be kept.")
+        }
     }
 
     private var baseline: some View {
@@ -113,6 +128,7 @@ struct PlotEditorView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 80)
                 .focused($distanceFieldFocused)
+                .accessibilityLabel("A–B distance")
 
                 Picker("Unit", selection: Binding(
                     get: { viewModel.doc.unit },
@@ -133,18 +149,22 @@ struct PlotEditorView: View {
                     } label: {
                         Image(systemName: "trash")
                     }
+                    .accessibilityLabel("Delete selected point")
                 }
 
                 Menu {
                     Button("Clear all points", role: .destructive) {
-                        viewModel.clearAllPoints()
+                        distanceFieldFocused = false
+                        showingClearConfirmation = true
                     }
+                    .disabled(viewModel.doc.points.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel("Plot options")
             }
 
-            Text("Tap the canvas to add a point · drag points, A, or B to move them")
+            Text(viewModel.arUnavailableReason ?? "Tap to add a point · drag points, A, or B to move them")
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
