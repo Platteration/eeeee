@@ -9,17 +9,20 @@ The phone app takes the same plot into augmented reality. This one is for the
 work that happens before and after that: laying the plot out with a mouse,
 checking the numbers, printing it, and handing the JSON to the phone.
 
-No build step, no dependencies — plain ES modules and one `<svg>`.
+The editor uses plain ES modules and SVG. Local OCR uses a pinned Tesseract.js
+worker and English model, copied into self-hosted assets during installation.
 
 ## Running it
 
 ```sh
 cd web
+npm ci             # prepare local OCR assets; Node 22 or 24
 npm start          # http://localhost:8000  (PORT=… to change it)
 ```
 
-`npm start` runs the small static server in `tools/serve.js`; any static server
-will do. Opening `index.html` as a `file://` URL will *not* work — ES modules
+`npm start` runs the server in `tools/serve.js`; any static server can serve the
+editor and local OCR assets. Optional online OCR requires the configured backend.
+Opening `index.html` as a `file://` URL will *not* work — ES modules
 need an `http://` origin.
 
 ```sh
@@ -186,3 +189,21 @@ failed-save retry, and the narrow layout.
 Dragging saves once on release or interruption, and remains one Undo step.
 Canceled touches and Shift-clicks do not create points. Canvas markers have
 44-pixel hit areas at every zoom, and touch-device form controls are larger.
+# Reviewed measurements and OCR
+
+Choose **Enter measurements…** to paste a table or open CSV/TSV/text. Select
+along/perpendicular offsets or distances from A/B, input units, decimal separator,
+and column numbers. An optional header is skipped only when selected. Preview,
+correct or explicitly remove invalid rows, then add points or replace existing
+points as one undoable action. The working target is 250 points; existing plots
+are not truncated, and bulk entry accepts up to 500 rows per operation.
+
+The photo section accepts JPEG/PNG/WebP, with camera input, crop and rotation.
+Local OCR loads self-hosted assets prepared by `npm ci`; its results must be
+checked against the source image before applying. See [OCR_PILOT.md](OCR_PILOT.md)
+for optional access-code online recognition, container setup and quality gates.
+
+Autosave uses browser locks and compares the last read save before writing.
+Conflicting tabs pause autosave and offer loading the latest save or exporting
+the current version. Unsupported locking or blocked storage leaves export
+available. A corrupt previous save stays downloadable until replacement succeeds.

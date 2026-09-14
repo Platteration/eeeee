@@ -42,3 +42,26 @@ test('bad preferences cannot break startup and overflow leaves the plot unchange
   await expect(page.locator('#status')).toContainText('supported range');
   expect(await page.evaluate(() => JSON.stringify(window.abplot.store.document))).toBe(before);
 });
+
+test('a delayed JSON read cannot overwrite newer edits and can be cancelled', async ({ page }) => {
+  await page.evaluate(() => {
+    const original = File.prototype.text;
+    File.prototype.text = function () { return this.name === 'slow.json' ? new Promise(resolve => { window.finishRead = resolve; }) : original.call(this); };
+  });
+  await page.locator('#file').setInputFiles({ name: 'slow.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+  await page.locator('#name').fill('Newer work');
+  await page.evaluate(() => window.finishRead(JSON.stringify({ pointA: [100, 400], pointB: [300, 400], abDistance: 2, points: [] })));
+  await expect(page.locator('#status')).toContainText('plot changed');
+  await expect(page.locator('#name')).toHaveValue('Newer work');
+  await page.locator('#file').setInputFiles({ name: 'slow.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+  await page.locator('#cancel-file').click();
+  await page.evaluate(() => window.finishRead('{}'));
+  await expect(page.locator('#status')).toHaveText('File read cancelled.');
+});
+
+test('failed downloads explain the problem and release the export button', async ({ page }) => {
+  await page.evaluate(() => { URL.createObjectURL = () => { throw new Error('Downloads blocked'); }; });
+  await page.locator('#export-json').click();
+  await expect(page.locator('#status')).toContainText('Downloads blocked');
+  await expect(page.locator('#export-json')).toBeEnabled();
+});

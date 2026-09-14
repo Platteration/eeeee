@@ -6,3 +6,7 @@ DerivedData/
 node_modules/
 playwright-report/
 test-results/
+web/vendor/
+web/data/
+.env
+*.traineddata

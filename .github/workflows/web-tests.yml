@@ -6,6 +6,20 @@ on:
 permissions:
   contents: read
 jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t abplot-web ./web
+      - name: Check disabled pilot and static assets
+        run: |
+          docker run -d --name abplot -p 8000:8000 abplot-web
+          for i in $(seq 1 20); do curl -fsS http://localhost:8000/api/ocr/config && break; sleep 1; done
+          test "$(curl -fsS http://localhost:8000/api/ocr/config)" = '{"enabled":false}'
+          curl -fsS http://localhost:8000/vendor/ocr/tesseract.esm.min.js -o /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/server/ocr-api.js)" = 404
+      - if: always()
+        run: docker logs abplot
   test:
     strategy:
       matrix:
