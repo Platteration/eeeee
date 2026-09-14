@@ -6,6 +6,7 @@ import Foundation
 final class PlotViewModel: ObservableObject {
     @Published var doc: PlotDocument
     @Published var selectedPointID: UUID?
+    @Published private(set) var saveError: String?
 
     private let saveURL: URL
     private var nextLabelNumber: Int
@@ -97,6 +98,10 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
+    func retrySaving() {
+        save()
+    }
+
     /// Apply one uniform scale and translation to every canvas position.
     /// The declared distance and coordinates relative to A/B stay unchanged.
     func fitPlot(in size: CGSize) {
@@ -165,7 +170,10 @@ final class PlotViewModel: ObservableObject {
 
     private func save() {
         let current = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
-        guard current != savedSnapshot else { return }
+        guard current != savedSnapshot else {
+            if saveError != nil { persist() }
+            return
+        }
         undoHistory.append(savedSnapshot)
         if undoHistory.count > historyLimit {
             undoHistory.removeFirst(undoHistory.count - historyLimit)
@@ -179,7 +187,9 @@ final class PlotViewModel: ObservableObject {
         do {
             let data = try JSONEncoder().encode(doc)
             try data.write(to: saveURL, options: .atomic)
+            saveError = nil
         } catch {
+            saveError = error.localizedDescription
             print("ABPlot: failed to save plot: \(error)")
         }
     }

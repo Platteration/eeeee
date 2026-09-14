@@ -40,7 +40,8 @@ final class ARPlotSession: ObservableObject {
     @Published private(set) var yawOffsetDegrees: Double = 0
 
     /// Declared A–B distance in meters, set by the AR screen for HUD text.
-    var declaredSpanMeters: Double = 0
+    @Published var declaredSpanMeters: Double = 0
+    @Published var displayUnit: LengthUnit = .meters
 
     /// The AR coordinator. Weak: the coordinator owns the AR view, not this.
     weak var controller: (any ARPlotControlling)?
@@ -75,28 +76,27 @@ final class ARPlotSession: ObservableObject {
         case .placed(_, _, let tappedSpan):
             guard declaredSpanMeters > 0 else { return "Placed" }
             let deltaPercent = (Double(tappedSpan) - declaredSpanMeters) / declaredSpanMeters * 100
-            return String(
-                format: "Placed · your span %.2f m vs declared %.2f m (%+.0f%%)",
-                tappedSpan, declaredSpanMeters, deltaPercent
-            )
+            return "Placed · your span \(formattedDistance(Double(tappedSpan))) vs declared \(formattedDistance(declaredSpanMeters)) (\(String(format: "%+.0f%%", deltaPercent)))"
         }
     }
 
     /// Live distance readout shown while aiming B.
     var liveMeasurement: String? {
         guard case .waitingForB = phase, let distance = reticleDistanceFromA else { return nil }
-        guard declaredSpanMeters > 0 else { return String(format: "%.2f m", distance) }
+        guard declaredSpanMeters > 0 else { return formattedDistance(Double(distance)) }
         let deltaPercent = (Double(distance) - declaredSpanMeters) / declaredSpanMeters * 100
-        return String(
-            format: "%.2f m · declared %.2f m (%+.0f%%)",
-            distance, declaredSpanMeters, deltaPercent
-        )
+        return "\(formattedDistance(Double(distance))) · declared \(formattedDistance(declaredSpanMeters)) (\(String(format: "%+.0f%%", deltaPercent)))"
+    }
+
+    private func formattedDistance(_ meters: Double) -> String {
+        String(format: "%.2f %@", meters / displayUnit.toMeters, displayUnit.symbol)
     }
 
     /// Rotate the placed plot to `degrees` away from its committed heading.
     /// Named distinctly from the controller's radian-based `setYawOffset` so the
     /// two are never confused at a call site.
     func setRotation(degrees: Double) {
+        guard degrees.isFinite else { return }
         let clamped = min(max(degrees, -180), 180)
         yawOffsetDegrees = clamped
         controller?.setYawOffset(Float(clamped) * .pi / 180)

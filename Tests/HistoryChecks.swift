@@ -82,6 +82,24 @@ struct HistoryChecks {
         precondition(reloaded.doc == model.doc)
         precondition(!reloaded.canUndo && !reloaded.canRedo)
 
+        // Save failures remain visible until retry succeeds, without losing history.
+        let missingDirectory = directory.appendingPathComponent("not-created-yet")
+        let retryURL = missingDirectory.appendingPathComponent("plot.json")
+        let retryModel = PlotViewModel(saveURL: retryURL)
+        retryModel.addPoint(at: CGPoint(x: 50, y: 60))
+        precondition(retryModel.saveError != nil && retryModel.canUndo)
+        let unsaved = retryModel.doc
+        try FileManager.default.createDirectory(at: missingDirectory, withIntermediateDirectories: true)
+        retryModel.retrySaving()
+        precondition(retryModel.saveError == nil && retryModel.doc == unsaved)
+        precondition(PlotViewModel(saveURL: retryURL).doc == unsaved)
+        retryModel.undo()
+        precondition(retryModel.doc.points.isEmpty && !retryModel.canUndo)
+        // endDrag is also the lifecycle flush used when the app becomes inactive.
+        retryModel.moveA(to: CGPoint(x: 90, y: 80))
+        retryModel.endDrag()
+        precondition(PlotViewModel(saveURL: retryURL).doc.pointA == CGPoint(x: 90, y: 80))
+
         let bounded = PlotViewModel(saveURL: directory.appendingPathComponent("bounded.json"))
         for value in 3...107 { bounded.setDistance(Double(value)) }
         var undoCount = 0

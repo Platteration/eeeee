@@ -163,6 +163,17 @@ struct PlotEditorView: View {
 
     private var bottomBar: some View {
         VStack(spacing: 10) {
+            if viewModel.saveError != nil {
+                HStack {
+                    Text("Couldn’t autosave. Your latest changes are only in memory.")
+                        .font(.caption)
+                    Spacer()
+                    Button("Retry save") { viewModel.retrySaving() }
+                        .font(.caption.bold())
+                }
+                .foregroundColor(.orange)
+                .accessibilityElement(children: .contain)
+            }
             HStack {
                 Text("A–B distance")
                     .font(.subheadline)
