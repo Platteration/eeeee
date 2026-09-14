@@ -562,3 +562,19 @@ tbody tr:focus-visible {
   button, select, input { min-height: 44px; }
   .zoom-buttons button, .row-delete { min-width: 44px; min-height: 44px; }
 }
+/* Reviewed imports share the editor's typography and native controls. */
+dialog { box-sizing: border-box; width: min(960px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 20px; border: 1px solid #c8c8ce; border-radius: 14px; color: #202024; background: #fff; }
+dialog::backdrop { background: #0008; }
+dialog textarea { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 16px; padding: 10px; font: inherit; }
+.entry-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0; }
+.entry-options label { display: flex; flex-direction: column; gap: 5px; }
+dialog button, dialog select, dialog input { min-height: 44px; max-width: 100%; }
+dialog table input { width: 100px; }
+#entry-preview svg { width: 100%; height: auto; max-height: 320px; }
+#entry-status { overflow-wrap: anywhere; }
+#entry-review .table-scroll { max-height: 350px; overflow: auto; }
+#entry-confirmation { margin: 12px 0; }
+#ocr-preview { display: block; max-width: 100%; max-height: 420px; margin: 12px auto; object-fit: contain; }
+#ocr-panel details { margin: 16px 0; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+#ocr-panel summary { cursor: pointer; min-height: 44px; }
+#ocr-notes { overflow-wrap: anywhere; }

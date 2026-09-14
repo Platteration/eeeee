@@ -20,6 +20,7 @@ import { drawingArea, fitScale, formatScale } from './paper.js';
 import { PREFERENCES_KEY, readPreferences } from './preferences.js';
 import { LatestOperation, withTimeout } from './operations.js';
 import { downloadText } from './exporters.js';
+import { setupImportPanel } from './importPanel.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -694,3 +695,4 @@ editor.fit();
 
 // Handy in the console, and how the smoke tests drive the app.
 window.abplot = { store, editor };
+setupImportPanel({ store, editor, setStatus });
