@@ -193,20 +193,22 @@ function renderHead(columns) {
  */
 function captureTableFocus() {
   const active = document.activeElement;
-  if (!active || !ui.tableBody.contains(active) || !active.dataset.row) return null;
+  if (!active || !ui.tableBody.contains(active)) return null;
+  const row = active.dataset.row ?? active.closest('tr')?.dataset.id;
+  if (!row) return null;
   return {
-    row: active.dataset.row,
-    column: active.dataset.column,
-    start: active.selectionStart,
-    end: active.selectionEnd,
+    row,
+    column: active.dataset.column ?? (active.matches('button') ? 'delete' : 'row'),
+    start: active.selectionStart ?? null,
+    end: active.selectionEnd ?? null,
   };
 }
 
 function restoreTableFocus(focus) {
   if (!focus) return;
-  const input = ui.tableBody.querySelector(
-    `[data-row="${CSS.escape(focus.row)}"][data-column="${CSS.escape(focus.column)}"]`,
-  );
+  const row = ui.tableBody.querySelector(`tr[data-id="${CSS.escape(focus.row)}"]`);
+  const input = focus.column === 'row' ? row : focus.column === 'delete' ? row?.querySelector('button')
+    : row?.querySelector(`[data-column="${CSS.escape(focus.column)}"]`);
   if (!input) return;
   input.focus();
   if (focus.start !== null) input.setSelectionRange(focus.start, focus.end);
@@ -358,6 +360,18 @@ function renderScaleBar(bar) {
   ui.scaleBarLabel.textContent = bar.label;
 }
 
+let tableRenderPending = false;
+function scheduleTableRender() {
+  if (tableRenderPending) return;
+  tableRenderPending = true;
+  // Finish the browser's blur/change/Tab sequence before replacing cells.
+  // Coalescing renders also avoids rebuilding the table several times per frame.
+  requestAnimationFrame(() => {
+    tableRenderPending = false;
+    renderTable(store.document);
+  });
+}
+
 function render() {
   const doc = store.document;
   ui.saveStatus.textContent = store.saveError ?? (store.isEditing ? 'Editing… saves when you release the point.' : store.hasSaved
@@ -367,7 +381,7 @@ function render() {
   ui.retrySave.textContent = store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
   ui.recovery.hidden = store.recoveryText === null;
   renderScale(doc);
-  renderTable(doc);
+  scheduleTableRender();
   ui.undo.disabled = !store.canUndo;
   ui.redo.disabled = !store.canRedo;
   renderSheetNote();
