@@ -62,7 +62,7 @@ const ui = {
 /**
  * `localStorage` is not just empty but *throwing* in a browser set to block
  * site data. Access it without writing a probe so a full store can still be
- * read and recovered. The store reports read/write failures in the Files panel.
+ * read and recovered. The store reports read/write failures in the Plot panel.
  */
 function availableStorage() {
   try {

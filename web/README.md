@@ -40,7 +40,7 @@ npm test           # the whole suite, no install required
 | Undo / redo | <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> — a whole drag undoes as one step |
 
 The plot autosaves to `localStorage`, so a reload picks up where you left off.
-The Files panel shows save failures and offers Retry save. Export JSON for a
+The Plot panel shows save failures and offers Retry save. Export JSON for a
 backup that works across devices. If a previous save cannot be read, it stays
 untouched until you explicitly replace it; download its recovery copy first.
 

@@ -58,6 +58,9 @@
             <input id="name" type="text" placeholder="Untitled plot" maxlength="80" />
           </div>
           <p class="note">Titles the drawing and names its exported files.</p>
+          <p id="save-status" class="status" role="status"></p>
+          <button id="retry-save" type="button" hidden>Retry save</button>
+          <button id="recovery" type="button" hidden>Download previous save for recovery</button>
         </section>
 
         <section class="panel-section">
@@ -136,9 +139,6 @@
             Names, points, and scale travel with the file. Import an app backup here to continue editing.
           </p>
           <p id="status" class="status" role="status"></p>
-          <p id="save-status" class="status" role="status"></p>
-          <button id="retry-save" type="button" hidden>Retry save</button>
-          <button id="recovery" type="button" hidden>Download previous save for recovery</button>
         </section>
 
         <section class="panel-section">
