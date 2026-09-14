@@ -40,6 +40,9 @@ npm test           # the whole suite, no install required
 | Undo / redo | <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> — a whole drag undoes as one step |
 
 The plot autosaves to `localStorage`, so a reload picks up where you left off.
+The Plot panel shows save failures and offers Retry save. Export JSON for a
+backup that works across devices. If a previous save cannot be read, it stays
+untouched until you explicitly replace it; download its recovery copy first.
 
 ### Measuring, both ways
 
@@ -59,8 +62,8 @@ pointing device: add a point, tab to its cells, and type where it goes.
 
 The declared A–B distance is the only real-world dimension you supply;
 everything else follows from it. Change it and every measurement rescales.
-Changing the unit *reinterprets* the number rather than converting it — 2 m
-becomes 2 ft, matching the iOS app, so a document means the same thing in both.
+Changing units converts the displayed distance: 2 m becomes about 6.562 ft.
+The physical scale and point positions stay unchanged, matching the updated iOS app.
 
 The grid is aligned to the baseline rather than the screen: each square is a
 round real distance on the ground, and the two heavier lines are the axes
@@ -70,10 +73,10 @@ side you see below the baseline looking straight down at the plot.
 
 ### Files
 
-- **Export JSON** writes the iOS app's `plot.json`, byte-compatible with what
-  the phone reads and writes (see below). To open it there, copy it into the
-  app's folder in the Files app (*On My iPhone → ABPlot*), replacing
-  `plot.json`, and relaunch the app — it loads its plot at launch.
+- **Export JSON** writes the portable ABPlot format. In the updated iOS app,
+  choose **Plot files & name → Open plot JSON**, review it, and replace the
+  current plot. Use **Fit plot to screen** if the browser canvas was larger.
+  The app can save JSON back to Files without renaming files or relaunching.
 - **Import JSON** takes that file back, or anything close enough to it. Drop a
   file anywhere on the page to import it.
 - **Export CSV** is the measurement table, in the document's unit.
@@ -122,10 +125,11 @@ That is exactly what this app writes. On import it also accepts `{"x": …,
 or third-party file loads without ceremony; anything genuinely ambiguous is
 rejected with a message rather than guessed at.
 
-One key is ours alone: an optional `name`. Swift's `JSONDecoder` ignores keys
-its struct has no property for, so a named plot still opens on the phone — it
-just forgets the name when it saves. An unnamed plot writes no `name` key at
-all, leaving the file byte-identical to what the phone produces.
+The optional `name` is retained by the updated iOS app. Older iOS versions
+ignore it. An unnamed plot omits the key. Imported IDs are normalized to
+uppercase UUIDs, with unique replacements for invalid or duplicate IDs, so
+every point remains editable and exports successfully to iOS. File uploads
+are limited to 5 MB; distances must be JSON numbers.
 
 Canvas coordinates carry no units and no absolute meaning — only each point's
 position *relative to A and B* matters, which is why a plot drawn in a browser

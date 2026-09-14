@@ -5,7 +5,7 @@
 
 import { Store } from './store.js';
 import { PlotEditor } from './editor.js';
-import { createPoint, defaultDocument, fileStem, parseDocument, UNITS } from './plotDocument.js';
+import { changeUnit, createPoint, defaultDocument, fileStem, parseDocument, UNITS } from './plotDocument.js';
 import {
   isMeasurable,
   measurePoints,
@@ -49,6 +49,9 @@ const ui = {
   exportPng: $('export-png'),
   reset: $('reset'),
   status: $('status'),
+  saveStatus: $('save-status'),
+  retrySave: $('retry-save'),
+  recovery: $('recovery'),
   readout: $('readout'),
   scaleBar: $('scale-bar'),
   scaleBarRule: document.querySelector('.scale-bar-rule'),
@@ -58,14 +61,11 @@ const ui = {
 
 /**
  * `localStorage` is not just empty but *throwing* in a browser set to block
- * site data, so probe it before handing it to the store; without it the app
- * still works, it simply forgets the plot between visits.
+ * site data. Access it without writing a probe so a full store can still be
+ * read and recovered. The store reports read/write failures in the Plot panel.
  */
 function availableStorage() {
   try {
-    const probe = '__abplot_probe__';
-    window.localStorage.setItem(probe, '1');
-    window.localStorage.removeItem(probe);
     return window.localStorage;
   } catch {
     return null;
@@ -127,7 +127,7 @@ function renderScale(doc) {
   const unitsPerOne = 1 / (perUnit / UNITS[doc.unit].toMeters);
   ui.scaleNote.textContent =
     `1 ${symbol} = ${unitsPerOne.toFixed(1)} canvas units · baseline ${canvasABLength(doc.pointA, doc.pointB).toFixed(0)} units. ` +
-    `Switching unit reinterprets the number rather than converting it.`;
+    `Switching units converts the distance and keeps the same physical scale.`;
 }
 
 /**
@@ -359,6 +359,12 @@ function renderScaleBar(bar) {
 
 function render() {
   const doc = store.document;
+  ui.saveStatus.textContent = store.saveError ?? (store.hasSaved
+    ? 'Saved in this browser. Export JSON for a portable backup.' : 'Autosave ready. Export JSON for a portable backup.');
+  ui.saveStatus.dataset.tone = store.saveError ? 'error' : 'ok';
+  ui.retrySave.hidden = !store.saveError;
+  ui.retrySave.textContent = store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
+  ui.recovery.hidden = store.recoveryText === null;
   renderScale(doc);
   renderTable(doc);
   ui.undo.disabled = !store.canUndo;
@@ -388,7 +394,8 @@ function loadDocument(doc, message) {
 async function importFile(file) {
   if (!file) return;
   try {
-    loadDocument(parseDocument(await file.text()), `Imported ${file.name}.`);
+    if (file.size > 5 * 1024 * 1024) throw new Error('Choose a plot JSON file smaller than 5 MB');
+    loadDocument(parseDocument(await file.text()), `Imported ${file.name}. Undo restores the previous plot.`);
   } catch (error) {
     setStatus(`Could not import ${file.name}: ${error.message}`, 'error');
   }
@@ -423,9 +430,23 @@ ui.distance.addEventListener('blur', () => {
 
 ui.unit.addEventListener('change', () => {
   const unit = ui.unit.value;
-  store.apply((draft) => {
-    draft.unit = unit;
-  });
+  try { store.apply((draft) => changeUnit(draft, unit)); }
+  catch (error) { renderScale(store.document); setStatus(error.message, 'error'); }
+});
+
+ui.retrySave.addEventListener('click', () => {
+  if (store.needsRecovery && !window.confirm('Replace the unreadable previous autosave with the current plot? Download its recovery copy first if you need to keep it.')) return;
+  store.retrySaving(availableStorage(), { replaceUnreadable: true });
+});
+ui.recovery.addEventListener('click', () => {
+  if (store.recoveryText === null) return;
+  const url = URL.createObjectURL(new Blob([store.recoveryText], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'plot-recovery.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  setStatus('Recovery download requested. When you have saved it, choose Replace previous autosave to resume saving.');
 });
 
 ui.undo.addEventListener('click', () => store.undo());
@@ -467,11 +488,7 @@ const exportName = (suffix) => `${fileStem(store.document)}${suffix}`;
 ui.exportJson.addEventListener('click', () => {
   const filename = exportName('.json');
   downloadJson(store.document, filename);
-  setStatus(
-    filename === 'plot.json'
-      ? 'Exported plot.json — copy it into the iOS app’s folder to place it in AR.'
-      : `Exported ${filename} — rename it plot.json for the iOS app to read it.`,
-  );
+  setStatus(`Exported ${filename}. In the updated iOS app, choose Plot files & name → Open plot JSON.`);
 });
 ui.exportCsv.addEventListener('click', () => {
   const filename = exportName('-measurements.csv');
