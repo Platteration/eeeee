@@ -22,6 +22,16 @@ struct MeasurementImportView: View {
     @State private var confirmingReplacement = false
     @FocusState private var editingText: Bool
 
+    init(canvasSize: CGSize, initialDistance: Double, initialUnit: LengthUnit,
+         apply: @escaping (PlotDocument) -> Void) {
+        self.canvasSize = canvasSize
+        self.initialDistance = initialDistance
+        self.initialUnit = initialUnit
+        self.apply = apply
+        _baseline = State(initialValue: String(initialDistance))
+        _unit = State(initialValue: initialUnit)
+    }
+
     private var parsed: MeasurementImport.Parsed { MeasurementImport.parse(text) }
     private var preview: Result<PlotDocument, Error> {
         Result {
@@ -71,6 +81,7 @@ struct MeasurementImportView: View {
                     Text("Enter the baseline and unit from your source. These apply to every row.")
                         .font(.caption).foregroundColor(.secondary)
                 }
+                .disabled(isRecognizing)
                 Section {
                     TextEditor(text: $text)
                         .font(.system(.body, design: .monospaced))
@@ -79,16 +90,18 @@ struct MeasurementImportView: View {
                         .autocorrectionDisabled()
                         .focused($editingText)
                         .accessibilityLabel("Recognized measurement rows")
+                        .disabled(isRecognizing)
                     Text(mode == .distances
                          ? "One row: label distance-from-A distance-from-B\nExample: P1 3.0 4.0"
                          : "One row: label along-AB perpendicular\nExample: P1 2.0 -1.0\nPositive perpendicular is below A→B; negative is above.")
                         .font(.caption).foregroundColor(.secondary)
-                    Text("Correct recognition errors and remove headings/notes. Use spaces, commas, or semicolons between columns. For decimal commas, separate columns with spaces or semicolons.")
+                    Text("Correct recognition errors and remove headings/notes. Use spaces, commas, or semicolons between columns. For decimal commas, separate columns with spaces or semicolons. Do not use thousands separators.")
                         .font(.caption).foregroundColor(.secondary)
                 } header: { Text("Review recognized text") }
 
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     reviewSection
+                        .disabled(isRecognizing)
                 }
             }
             .navigationTitle("Scan measurements")
@@ -108,9 +121,6 @@ struct MeasurementImportView: View {
                     Spacer()
                     Button("Done") { editingText = false; hideKeyboard() }
                 }
-            }
-            .onAppear {
-                if baseline.isEmpty { baseline = String(initialDistance); unit = initialUnit }
             }
             .task(id: photo) {
                 guard let photo else { return }
