@@ -557,3 +557,8 @@ tbody tr:focus-visible {
     max-height: 18rem;
   }
 }
+
+@media (pointer: coarse) {
+  button, select, input { min-height: 44px; }
+  .zoom-buttons button, .row-delete { min-width: 44px; min-height: 44px; }
+}

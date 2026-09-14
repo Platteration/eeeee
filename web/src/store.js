@@ -62,6 +62,7 @@ export class Store {
 
   get recoveryText() { return this.#recoveryText; }
   get hasSaved() { return this.#hasSaved; }
+  get isEditing() { return this.#pending !== null; }
   get needsRecovery() { return this.#loadError !== null; }
 
   retrySaving(storage = this.#storage, { replaceUnreadable = false } = {}) {
@@ -101,6 +102,7 @@ export class Store {
 
   /** Apply `mutate(draft)` as one undoable edit. */
   apply(mutate) {
+    this.end();
     const before = clone(this.#doc);
     const draft = clone(this.#doc);
     mutate(draft);
@@ -112,22 +114,28 @@ export class Store {
 
   /** Start a gesture whose intermediate states should not enter the history. */
   begin() {
+    this.end();
     this.#pending = clone(this.#doc);
   }
 
   /** Apply a frame of an in-progress gesture. */
   mutate(mutate) {
+    if (!this.#pending) { this.apply(mutate); return; }
     const draft = clone(this.#doc);
     mutate(draft);
     this.#doc = draft;
-    this.#changed();
+    this.#changed(false);
   }
 
   /** Finish a gesture, recording it as a single undoable edit if it changed anything. */
   end() {
     const before = this.#pending;
     this.#pending = null;
-    if (!before || JSON.stringify(before) === JSON.stringify(this.#doc)) return;
+    if (!before) return;
+    if (JSON.stringify(before) === JSON.stringify(this.#doc)) {
+      this.#changed(false);
+      return;
+    }
     this.#pushUndo(before);
     this.#changed();
   }
@@ -154,6 +162,7 @@ export class Store {
   }
 
   undo() {
+    this.end();
     if (!this.canUndo) return;
     this.#redo.push(clone(this.#doc));
     this.#doc = this.#undo.pop();
@@ -161,6 +170,7 @@ export class Store {
   }
 
   redo() {
+    this.end();
     if (!this.canRedo) return;
     this.#undo.push(clone(this.#doc));
     this.#doc = this.#redo.pop();
