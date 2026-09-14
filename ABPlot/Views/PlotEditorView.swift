@@ -1,10 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PlotEditorView: View {
     @EnvironmentObject private var viewModel: PlotViewModel
     @FocusState private var distanceFieldFocused: Bool
     @State private var showingClearConfirmation = false
     @State private var canvasSize: CGSize = .zero
+    @State private var showingExport = false
+    @State private var exportFile = PlotCSVFile(text: "")
+    @State private var exportError: String?
 
     private static let canvasSpace = "canvas"
 
@@ -40,6 +44,21 @@ struct PlotEditorView: View {
             .onChange(of: geo.size) { canvasSize = $0 }
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
+        .fileExporter(isPresented: $showingExport, document: exportFile,
+                      contentType: .commaSeparatedText, defaultFilename: "ABPlot-coordinates") { result in
+            if case .failure(let error) = result {
+                if let error = error as? CocoaError, error.code == .userCancelled { return }
+                exportError = error.localizedDescription
+            }
+        }
+        .alert("Could not export coordinates", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "Please try again.")
+        }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarLeading) {
                 Button {
@@ -184,6 +203,18 @@ struct PlotEditorView: View {
                 }
 
                 Menu {
+                    Button {
+                        distanceFieldFocused = false
+                        do {
+                            exportFile = PlotCSVFile(text: try PlotCSV.string(for: viewModel.doc))
+                            showingExport = true
+                        } catch {
+                            exportError = error.localizedDescription
+                        }
+                    } label: {
+                        Label("Export coordinates (CSV)", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(!viewModel.canEnterAR)
                     Button {
                         distanceFieldFocused = false
                         viewModel.fitPlot(in: canvasSize)

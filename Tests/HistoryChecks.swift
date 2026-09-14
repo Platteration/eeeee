@@ -140,6 +140,48 @@ struct HistoryChecks {
         degenerate.fitPlot(in: CGSize(width: 320, height: 240))
         precondition(degenerate.doc.pointA == CGPoint(x: 160, y: 120))
         precondition(degenerate.doc.pointB == degenerate.doc.pointA)
-        print("Editor checks passed: history, drag grouping, labels, units, persistence, fit geometry, and degenerate bounds")
+        var exported = PlotDocument(
+            pointA: CGPoint(x: 100, y: 300), pointB: CGPoint(x: 300, y: 300),
+            abDistance: 4, unit: .meters,
+            points: [PlotPoint(id: UUID(), position: CGPoint(x: 200, y: 200), label: "1")]
+        )
+        let csv = try PlotCSV.string(for: exported)
+        let rows = csv.components(separatedBy: "\r\n")
+        precondition(rows.count == 5 && rows.last == "")
+        precondition(rows[1] == "\"A\",0,0,0,4.0,\"m\"")
+        precondition(rows[2] == "\"B\",4.0,0,4.0,0,\"m\"")
+        let pointColumns = rows[3].components(separatedBy: ",")
+        precondition(pointColumns[1] == "2.0" && pointColumns[2] == "-2.0")
+        precondition(abs(Double(pointColumns[3])! - sqrt(8)) < 1e-10)
+        precondition(abs(Double(pointColumns[4])! - sqrt(8)) < 1e-10)
+        exported.unit = .feet
+        exported.abDistance = 4 / LengthUnit.feet.toMeters
+        let feetColumns = try PlotCSV.string(for: exported).components(separatedBy: "\r\n")[3]
+            .components(separatedBy: ",")
+        precondition(abs(Double(feetColumns[1])! * LengthUnit.feet.toMeters - 2) < 1e-10)
+        precondition(feetColumns[5] == "\"ft\"")
+        exported.points[0].label = "Point, \"north\"\nline"
+        let escapedCSV = try PlotCSV.string(for: exported)
+        precondition(escapedCSV.contains("\"Point, \"\"north\"\"\nline\""))
+
+        // Invalid geometry or distance must fail rather than export NaN values.
+        exported.abDistance = 0
+        do {
+            _ = try PlotCSV.string(for: exported)
+            preconditionFailure("Zero distance was exported")
+        } catch PlotCSV.ExportError.invalidDistance {}
+        exported.abDistance = 4
+        exported.pointB = exported.pointA
+        do {
+            _ = try PlotCSV.string(for: exported)
+            preconditionFailure("Coincident baseline was exported")
+        } catch PlotCSV.ExportError.invalidGeometry {}
+        exported.pointB = CGPoint(x: 300, y: 300)
+        exported.points[0].position.x = .infinity
+        do {
+            _ = try PlotCSV.string(for: exported)
+            preconditionFailure("Non-finite coordinate was exported")
+        } catch PlotCSV.ExportError.invalidGeometry {}
+        print("Editor checks passed: history, fit geometry, CSV coordinates, units, escaping, and invalid export inputs")
     }
 }

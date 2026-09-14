@@ -33,6 +33,18 @@ iOS 16+, iPhone only.
   Shift-Command-Z. The last 100 edits are available during the current session;
   the restored plot autosaves, but history starts fresh on relaunch.
 
+### Export coordinates
+- Choose **Plot options → Export coordinates (CSV)** and save to Files.
+  Add a plotted point and a valid A–B baseline/distance to enable export.
+- The CSV includes A, B, and every numbered point in the selected meters/feet
+  unit. `along_ab` measures from A toward B; `perpendicular_screen_down` is
+  positive on the canvas-down side of A→B. Both can be negative.
+- `distance_from_a` and `distance_from_b` are straight-line distances to the
+  references. These are calculated from your sketch and declared A–B distance,
+  not measured by the AR camera. Fitting the canvas does not change them.
+- Numeric fields use a decimal point, regardless of the phone's locale. Import
+  the file as comma-separated data if your spreadsheet expects a different delimiter.
+
 ### 2. AR mode
 - Tap **View in AR** (enabled once you have at least one point and a valid
   distance).
