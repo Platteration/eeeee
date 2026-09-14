@@ -71,3 +71,17 @@ test('obsolete asynchronous operations are ignored and timeouts release callers'
 test('huge grid indices terminate without unsafe integer loops', () => {
   assert.equal(abGrid(defaultDocument(), { x: 1e30, y: 1e30, w: 100, h: 100 }, 40), null);
 });
+
+test('edits during a locked recovery replacement are subsequently saved', async () => {
+  const disk = storage('{broken'); let release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let first = true;
+  const locks = { request: async (_, action) => { if (first) { first = false; entered(); await new Promise(resolve => { release = resolve; }); } return action(); } };
+  const store = Store.fromStorage(disk, { locks });
+  store.retrySaving(disk, { replaceUnreadable: true }); await started;
+  store.apply(doc => { doc.name = 'Edited while recovering'; });
+  assert.equal(store.isSaving, true); release();
+  await store.whenSaved(); await store.whenSaved();
+  assert.equal(JSON.parse(disk.getItem()).name, 'Edited while recovering');
+  assert.equal(store.isSaving, false); assert.equal(store.needsRecovery, false);
+});

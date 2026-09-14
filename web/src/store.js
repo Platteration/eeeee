@@ -34,7 +34,7 @@ export class Store {
   #expected = null;
   #conflict = false;
   #locks;
-  #saving = false;
+  #saving = 0;
   #queue = Promise.resolve();
   #revision = 0;
   #epoch = 0;
@@ -79,7 +79,7 @@ export class Store {
 
   get revision() { return this.#revision; }
   get hasConflict() { return this.#conflict; }
-  get isSaving() { return this.#saving; }
+  get isSaving() { return this.#saving > 0; }
   whenSaved() { return this.#queue; }
 
   loadLatest() {
@@ -250,7 +250,12 @@ export class Store {
         this.#expected = text;
         this.#hasSaved = true;
         this.#saveError = null;
-        if (replaceUnreadable) { this.#loadError = null; this.#recoveryText = null; }
+        if (replaceUnreadable) {
+          this.#loadError = null; this.#recoveryText = null;
+          // Edits made while the recovery write waited for its lock were kept
+          // in memory. Queue them now that the old corrupt save is replaced.
+          if (JSON.stringify(this.#doc) !== text) this.#save();
+        }
       } catch {
         this.#saveError = 'Could not autosave. Your latest changes are only in memory. Retry saving or export JSON.';
       } finally { this.#changed(false); }
@@ -258,10 +263,10 @@ export class Store {
     // Undefined is the synchronous test/non-browser adapter. Browser callers
     // explicitly supply LockManager or null; they never use an unsafe fallback.
     if (this.#locks === undefined) return persist();
-    this.#saving = true;
+    this.#saving++;
     this.#queue = this.#queue.then(() => this.#locks.request(STORAGE_KEY, persist)).catch(() => {
       this.#saveError = 'Could not acquire the save lock. Retry saving or export JSON.';
-    }).finally(() => { this.#saving = false; this.#changed(false); });
+    }).finally(() => { this.#saving--; this.#changed(false); });
     return this.#queue;
   }
 }
