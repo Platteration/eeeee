@@ -200,6 +200,37 @@ struct HistoryChecks {
             _ = try PlotCSV.string(for: exported)
             preconditionFailure("Non-finite coordinate was exported")
         } catch PlotCSV.ExportError.invalidGeometry {}
-        print("Editor checks passed: history, fit geometry, CSV coordinates, units, escaping, and invalid export inputs")
+        let canvas = CGSize(width: 320, height: 240)
+        let origin = CGPoint(x: 100, y: 100)
+        precondition(PlotMath.draggedPosition(from: origin, translation: .zero, in: canvas) == origin)
+        // Even if the finger began 15 points off-center, a 10-point translation
+        // moves the handle only 10 points. Subsequent events use the same origin.
+        precondition(PlotMath.draggedPosition(from: origin, translation: CGSize(width: 10, height: 5), in: canvas)
+                     == CGPoint(x: 110, y: 105))
+        precondition(PlotMath.draggedPosition(from: origin, translation: CGSize(width: 20, height: 10), in: canvas)
+                     == CGPoint(x: 120, y: 110))
+        precondition(PlotMath.draggedPosition(from: origin, translation: CGSize(width: 500, height: -500), in: canvas)
+                     == CGPoint(x: 298, y: 22))
+        precondition(PlotMath.draggedPosition(from: origin, translation: .zero, in: CGSize(width: 20, height: 10))
+                     == CGPoint(x: 10, y: 5))
+        precondition(PlotMath.clampToCanvas(origin, in: .zero) == .zero)
+
+        var measured = PlotDocument(pointA: .zero, pointB: CGPoint(x: 200, y: 0),
+                                    abDistance: 4, unit: .meters, points: [])
+        let distances = PlotMath.referenceDistances(of: CGPoint(x: 150, y: 200), in: measured)!
+        precondition(abs(distances.a - 5) < 1e-10)
+        precondition(abs(distances.b - sqrt(17)) < 1e-10)
+        measured.unit = .feet
+        measured.abDistance = 4 / LengthUnit.feet.toMeters
+        let feetDistances = PlotMath.referenceDistances(of: CGPoint(x: 150, y: 200), in: measured)!
+        precondition(abs(feetDistances.a * LengthUnit.feet.toMeters - 5) < 1e-10)
+        measured.pointB = .zero
+        precondition(PlotMath.referenceDistances(of: origin, in: measured) == nil)
+        measured.pointB = CGPoint(x: 200, y: 0)
+        measured.abDistance = 0
+        precondition(PlotMath.referenceDistances(of: origin, in: measured) == nil)
+        measured.abDistance = 4
+        precondition(PlotMath.referenceDistances(of: CGPoint(x: CGFloat.infinity, y: 0), in: measured) == nil)
+        print("Editor checks passed: history, fit/export, drag offsets, clamping, and reference-distance readouts")
     }
 }

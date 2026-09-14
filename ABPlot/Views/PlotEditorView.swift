@@ -22,7 +22,7 @@ struct PlotEditorView: View {
                         if viewModel.selectedPointID != nil {
                             viewModel.selectedPointID = nil
                         } else {
-                            viewModel.addPoint(at: clamp(location, in: geo.size))
+                            viewModel.addPoint(at: PlotMath.clampToCanvas(location, in: geo.size))
                         }
                     }
 
@@ -126,12 +126,10 @@ struct PlotEditorView: View {
         .onTapGesture {
             viewModel.selectedPointID = isSelected ? nil : point.id
         }
-        .gesture(
-            // Nonzero minimum distance so a selection tap doesn't nudge the point.
-            DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.canvasSpace))
-                .onChanged { viewModel.movePoint(id: point.id, to: clamp($0.location, in: size)) }
-                .onEnded { _ in viewModel.endDrag() }
-        )
+        .modifier(PlotDragModifier(position: point.position, canvasSize: size,
+                                   coordinateSpace: Self.canvasSpace,
+                                   move: { viewModel.movePoint(id: point.id, to: $0) },
+                                   end: { viewModel.endDrag() }))
     }
 
     private func referenceHandle(
@@ -154,11 +152,9 @@ struct PlotEditorView: View {
         .position(position)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Reference point \(label)")
-        .gesture(
-            DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.canvasSpace))
-                .onChanged { move(clamp($0.location, in: size)) }
-                .onEnded { _ in viewModel.endDrag() }
-        )
+        .modifier(PlotDragModifier(position: position, canvasSize: size,
+                                   coordinateSpace: Self.canvasSpace, move: move,
+                                   end: { viewModel.endDrag() }))
     }
 
     private var bottomBar: some View {
@@ -244,6 +240,8 @@ struct PlotEditorView: View {
                 .accessibilityLabel("Plot options")
             }
 
+            selectedPointDetails
+
             Text(viewModel.arUnavailableReason ?? "Tap to add a point · drag points, A, or B to move them")
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -253,12 +251,18 @@ struct PlotEditorView: View {
         .background(.thinMaterial)
     }
 
-    private func clamp(_ p: CGPoint, in size: CGSize) -> CGPoint {
-        let insetX = min(22, max(0, size.width / 2))
-        let insetY = min(22, max(0, size.height / 2))
-        return CGPoint(
-            x: min(max(p.x, insetX), max(insetX, size.width - insetX)),
-            y: min(max(p.y, insetY), max(insetY, size.height - insetY))
-        )
+    @ViewBuilder
+    private var selectedPointDetails: some View {
+        if let point = viewModel.doc.points.first(where: { $0.id == viewModel.selectedPointID }),
+           let distances = PlotMath.referenceDistances(of: point.position, in: viewModel.doc) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Point \(point.label) · distances from references")
+                    .font(.caption.bold())
+                Text("A: \(distances.a, format: .number.precision(.fractionLength(2))) \(viewModel.doc.unit.symbol) · B: \(distances.b, format: .number.precision(.fractionLength(2))) \(viewModel.doc.unit.symbol)")
+                    .font(.caption.monospacedDigit())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
     }
 }

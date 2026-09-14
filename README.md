@@ -30,6 +30,9 @@ iOS 16+, iPhone only.
   proportions and the declared distance, autosaves, and supports Undo.
 - Points and reference handles have larger touch targets; new points and drags
   stay inset from the canvas edges so their handles remain reachable.
+- Dragging preserves where you grabbed a handle, without snapping its center
+  to your finger. Tap a plotted point to see its distances from A and B in the
+  selected unit; these update as you move the selected point or either reference.
 - **Undo** and **Redo** recover point additions, deletions, whole drags, clearing,
   and distance/unit edits. External keyboards support Command-Z and
   Shift-Command-Z. The last 100 edits are available during the current session;
