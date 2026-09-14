@@ -46,3 +46,7 @@ jobs:
           -sdk iphoneos
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Check portable plot files
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/PlotJSON.swift ABPlot/ViewModels/PlotViewModel.swift Tests/JSONChecks.swift -o "$RUNNER_TEMP/json-checks"
+          "$RUNNER_TEMP/json-checks"
