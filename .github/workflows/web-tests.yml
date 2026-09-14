@@ -35,6 +35,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:browser
+      - name: Check mobile drag setup remains stable across fresh pages
+        run: npx playwright test --project=mobile-webkit --grep "an interrupted drag" --repeat-each=10
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

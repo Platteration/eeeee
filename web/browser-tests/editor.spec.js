@@ -49,9 +49,19 @@ test('canceled touch and shift click never add a point', async ({ page }) => {
 test('an interrupted drag saves its last position as one undoable edit', async ({ page }) => {
   const handle = page.locator('[data-handle="A"]');
   const svg = page.locator('#canvas');
-  const hitTarget = handle.locator('[data-hit-target]');
-  await expect(hitTarget).toBeVisible();
-  const box = await hitTarget.boundingBox();
+  // Marker nodes are replaced during rendering. Read the current target and
+  // its bounds together through the stable SVG root, instead of a visibility
+  // check followed by a separate geometry read on a potentially detached node.
+  let box;
+  await expect.poll(async () => {
+    box = await svg.evaluate((root) => {
+      const target = root.querySelector('[data-handle="A"] [data-hit-target]');
+      if (!target) return null;
+      const rect = target.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+    return Boolean(box && box.width > 0 && box.height > 0);
+  }).toBe(true);
   const start = { pointerId: 92, pointerType: 'touch', button: 0, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 };
   await handle.dispatchEvent('pointerdown', start);
   await svg.dispatchEvent('pointermove', { ...start, clientX: start.clientX + 25 });
