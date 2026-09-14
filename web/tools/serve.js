@@ -22,6 +22,7 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.wasm': 'application/wasm',
 };
 
 /**
@@ -54,10 +55,14 @@ const server = createServer(async (request, response) => {
       'content-length': size,
       'cache-control': 'no-cache',
     });
-    createReadStream(file).pipe(response);
-  } catch {
-    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-    response.end('Not found\n');
+    const stream = createReadStream(file);
+    stream.on('error', () => response.destroy());
+    response.on('close', () => stream.destroy());
+    stream.pipe(response);
+  } catch (error) {
+    const status = !target || ['ENOENT', 'ENOTDIR'].includes(error.code) ? 404 : 500;
+    response.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end(status === 404 ? 'Not found\n' : 'Could not read file\n');
   }
 });
 

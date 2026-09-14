@@ -36,12 +36,11 @@ export function abCoordinates(p, a, b) {
   const dy = p.y - a.y;
   const ux = b.x - a.x;
   const uy = b.y - a.y;
-  const lengthSquared = ux * ux + uy * uy;
-  if (!(lengthSquared > MIN_CANVAS_AB_DISTANCE * MIN_CANVAS_AB_DISTANCE)) return null;
-  return {
-    s: (dx * ux + dy * uy) / lengthSquared,
-    t: (dx * -uy + dy * ux) / lengthSquared,
-  };
+  const length = Math.hypot(ux, uy);
+  if (!Number.isFinite(length) || length <= MIN_CANVAS_AB_DISTANCE) return null;
+  const s = (dx / length) * (ux / length) + (dy / length) * (uy / length);
+  const t = (dx / length) * (-uy / length) + (dy / length) * (ux / length);
+  return Number.isFinite(s) && Number.isFinite(t) ? { s, t } : null;
 }
 
 /**
@@ -70,7 +69,8 @@ export function canvasABLength(a, b) {
 export function hasValidBaseline(a, b) {
   const ux = b.x - a.x;
   const uy = b.y - a.y;
-  return ux * ux + uy * uy > MIN_CANVAS_AB_DISTANCE * MIN_CANVAS_AB_DISTANCE;
+  const length = Math.hypot(ux, uy);
+  return Number.isFinite(length) && length > MIN_CANVAS_AB_DISTANCE;
 }
 
 /**

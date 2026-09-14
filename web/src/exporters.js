@@ -11,6 +11,8 @@ import { measurePoints, metersPerCanvasUnit, plotExtent } from './measurements.j
 import { abGrid } from './grid.js';
 import { MM_PER_PX, drawingArea, fitScale, formatScale, mmPerMeter, sheetSize } from './paper.js';
 import { formatCompact, formatLength, formatSigned, fromMeters, niceStep } from './format.js';
+import { validateGeometry } from './validation.js';
+import { withTimeout } from './operations.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -37,7 +39,8 @@ function contentBounds(doc) {
  * text, so this is not decoration.
  */
 function csvCell(value) {
-  const text = value === null || value === undefined ? '' : String(value);
+  let text = value === null || value === undefined ? '' : String(value);
+  if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -49,6 +52,7 @@ function csvCell(value) {
  * distance.
  */
 export function toCsv(doc) {
+  validateGeometry(doc);
   const unit = UNITS[doc.unit].symbol;
   const rows = measurePoints(doc);
   const header = [
@@ -203,6 +207,7 @@ export function toSvg(
     scale = null,
   } = {},
 ) {
+  validateGeometry(doc);
   // A named plot gets a title line, and the strip beneath the drawing grows to
   // hold it.
   const name = doc.name?.trim() ?? '';
@@ -221,6 +226,7 @@ export function toSvg(
     fittedLayout(doc, { width, padding, footer: name ? 108 : 78 });
 
   const { viewBox, px } = layout;
+  if (![...Object.values(viewBox), px].every(Number.isFinite) || px <= 0) throw new Error('This plot cannot be laid out at the selected scale.');
   // The drawing occupies everything above the footer strip; the grid is built
   // for exactly that region and clipped to it so it cannot run under the
   // scale bar and caption.
@@ -390,15 +396,22 @@ export function downloadSvg(doc, { filename = 'plot.svg', ...options } = {}) {
  * usable 3508 px image rather than a 1123 px screenshot of one.
  */
 export function rasterSize(markup, { pixelRatio, dpi }) {
-  const [, width, unit] = markup.match(/width="([\d.]+)(mm)?"/);
-  const [, height] = markup.match(/height="([\d.]+)(?:mm)?"/);
+  const matchWidth = markup.match(/width="([\d.]+)(mm)?"/);
+  const matchHeight = markup.match(/height="([\d.]+)(?:mm)?"/);
+  if (!matchWidth || !matchHeight) throw new Error('Invalid image dimensions');
+  const [, width, unit] = matchWidth;
+  const [, height] = matchHeight;
   const factor = unit === 'mm' ? dpi / 25.4 : pixelRatio;
   // A zero or missing factor would make a 0x0 canvas, which encodes to nothing
   // and reports itself only as "could not encode". Say what is actually wrong.
   if (!Number.isFinite(factor) || factor <= 0) {
     throw new Error(`Cannot rasterize at ${unit === 'mm' ? `${dpi} dpi` : `a pixel ratio of ${pixelRatio}`}`);
   }
-  return { width: Math.round(Number(width) * factor), height: Math.round(Number(height) * factor) };
+  const result = { width: Math.round(Number(width) * factor), height: Math.round(Number(height) * factor) };
+  if (!Object.values(result).every(n => Number.isSafeInteger(n) && n > 0 && n <= 16384) || result.width * result.height > 24000000) {
+    throw new Error('PNG exceeds the 24 megapixel limit. Choose a paper sheet or export SVG.');
+  }
+  return result;
 }
 
 /**
@@ -414,19 +427,20 @@ export async function downloadPng(doc, { filename = 'plot.png', pixelRatio = 2, 
   const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));
   try {
     const image = new Image();
-    await new Promise((resolve, reject) => {
+    await withTimeout(new Promise((resolve, reject) => {
       image.addEventListener('load', resolve, { once: true });
       image.addEventListener('error', () => reject(new Error('Could not render the plot to an image')), { once: true });
       image.src = url;
-    });
+    }));
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d');
+    if (!context) throw new Error('This browser could not create an image canvas. Export SVG instead.');
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const blob = await withTimeout(new Promise((resolve) => canvas.toBlob(resolve, 'image/png')));
     if (!blob) throw new Error('Could not encode the PNG');
     downloadBlob(filename, blob);
   } finally {

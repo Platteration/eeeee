@@ -17,6 +17,9 @@ import { formatLength, formatSigned, toMeters } from './format.js';
 import { canvasABLength } from './plotMath.js';
 import { downloadCsv, downloadJson, downloadPng, downloadSvg, planContentSize } from './exporters.js';
 import { drawingArea, fitScale, formatScale } from './paper.js';
+import { PREFERENCES_KEY, readPreferences } from './preferences.js';
+import { LatestOperation, withTimeout } from './operations.js';
+import { downloadText } from './exporters.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -73,22 +76,14 @@ function availableStorage() {
 }
 
 const storage = availableStorage();
-const store = Store.fromStorage(storage);
+const store = Store.fromStorage(storage, { locks: navigator.locks ?? null });
+const fileOperation = new LatestOperation();
 
 /**
  * Preferences about *output* rather than about the plot, kept apart from the
  * document so what gets exported stays byte-compatible with the iOS app.
  */
-const PREFERENCES_KEY = 'abplot.web.preferences.v1';
-const preferences = { annotateExports: false, sheet: '', planScale: '', ...readPreferences() };
-
-function readPreferences() {
-  try {
-    return JSON.parse(storage?.getItem(PREFERENCES_KEY) ?? '{}');
-  } catch {
-    return {};
-  }
-}
+const preferences = readPreferences(storage);
 
 function writePreferences() {
   try {
@@ -264,11 +259,11 @@ function moveTo(row, key, value) {
   if (!current) return;
   const offsets = { along: current.along, perp: current.perp, [key]: toMeters(value, doc.unit) };
   const position = positionForOffsets(doc, offsets);
-  if (!position) return;
-  store.apply((draft) => {
+  if (!position) { setStatus('These measurements are outside the supported range.', 'error'); return; }
+  try { store.apply((draft) => {
     const point = draft.points.find((p) => p.id === row.id);
     if (point) point.position = position;
-  });
+  }); } catch (error) { setStatus(error.message, 'error'); }
 }
 
 function renderTable(doc) {
@@ -386,11 +381,11 @@ function scheduleTableRender() {
 
 function render() {
   const doc = store.document;
-  ui.saveStatus.textContent = store.saveError ?? (store.isEditing ? 'Editing… saves when you release the point.' : store.hasSaved
+  ui.saveStatus.textContent = store.saveError ?? (store.isSaving ? 'Saving…' : store.isEditing ? 'Editing… saves when you release the point.' : store.hasSaved
     ? 'Saved in this browser. Export JSON for a portable backup.' : 'Autosave ready. Export JSON for a portable backup.');
   ui.saveStatus.dataset.tone = store.saveError ? 'error' : 'ok';
   ui.retrySave.hidden = !store.saveError;
-  ui.retrySave.textContent = store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
+  ui.retrySave.textContent = store.hasConflict ? 'Load latest save…' : store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
   ui.recovery.hidden = store.recoveryText === null;
   renderScale(doc);
   scheduleTableRender();
@@ -420,11 +415,17 @@ function loadDocument(doc, message) {
 
 async function importFile(file) {
   if (!file) return;
+  const current = fileOperation.start();
+  const revision = store.revision;
+  setStatus(`Reading ${file.name}…`);
   try {
     if (file.size > 5 * 1024 * 1024) throw new Error('Choose a plot JSON file smaller than 5 MB');
-    loadDocument(parseDocument(await file.text()), `Imported ${file.name}. Undo restores the previous plot.`);
+    const doc = parseDocument(await withTimeout(file.text()));
+    if (!current()) return;
+    if (store.revision !== revision) throw new Error('The plot changed while the file was loading. Import again when ready.');
+    loadDocument(doc, `Imported ${file.name}. Undo restores the previous plot.`);
   } catch (error) {
-    setStatus(`Could not import ${file.name}: ${error.message}`, 'error');
+    if (current()) setStatus(`Could not import ${file.name}: ${error.message}`, 'error');
   }
 }
 
@@ -444,9 +445,8 @@ ui.distance.addEventListener('input', () => {
   const entered = ui.distance.value.trim();
   const value = Number(entered);
   if (entered === '' || !Number.isFinite(value) || value < 0) return;
-  store.apply((draft) => {
-    draft.abDistance = value;
-  });
+  try { store.apply((draft) => { draft.abDistance = value; }); }
+  catch (error) { setStatus(error.message, 'error'); }
 });
 
 // Leaving the field puts back what the plot actually uses, so a rejected entry
@@ -462,17 +462,18 @@ ui.unit.addEventListener('change', () => {
 });
 
 ui.retrySave.addEventListener('click', () => {
+  if (store.hasConflict) {
+    if (!window.confirm('Load the latest saved plot? Download your current version first if you need to keep it. This resets undo history.')) return;
+    try { store.loadLatest(); editor.fit(); } catch (error) { setStatus(error.message, 'error'); }
+    return;
+  }
   if (store.needsRecovery && !window.confirm('Replace the unreadable previous autosave with the current plot? Download its recovery copy first if you need to keep it.')) return;
   store.retrySaving(availableStorage(), { replaceUnreadable: true });
 });
 ui.recovery.addEventListener('click', () => {
   if (store.recoveryText === null) return;
-  const url = URL.createObjectURL(new Blob([store.recoveryText], { type: 'application/json' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'plot-recovery.json';
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  try { downloadText('plot-recovery.json', store.recoveryText, 'application/json'); }
+  catch (error) { setStatus(`Could not download recovery: ${error.message}`, 'error'); return; }
   setStatus('Recovery download requested. When you have saved it, choose Replace previous autosave to resume saving.');
 });
 
@@ -512,16 +513,23 @@ ui.file.addEventListener('change', async () => {
 /** Exported files are named after the plot, so a folder of them stays legible. */
 const exportName = (suffix) => `${fileStem(store.document)}${suffix}`;
 
-ui.exportJson.addEventListener('click', () => {
+async function runExport(button, action) {
+  if (button.disabled) return;
+  button.disabled = true;
+  try { await action(); }
+  catch (error) { setStatus(`Could not export: ${error.message}`, 'error'); }
+  finally { button.disabled = false; }
+}
+ui.exportJson.addEventListener('click', () => runExport(ui.exportJson, () => {
   const filename = exportName('.json');
   downloadJson(store.document, filename);
-  setStatus(`Exported ${filename}. In the updated iOS app, choose Plot files & name → Open plot JSON.`);
-});
-ui.exportCsv.addEventListener('click', () => {
+  setStatus(`Download requested: ${filename}. In the updated iOS app, choose Plot files & name → Open plot JSON.`);
+}));
+ui.exportCsv.addEventListener('click', () => runExport(ui.exportCsv, () => {
   const filename = exportName('-measurements.csv');
   downloadCsv(store.document, filename);
-  setStatus(`Exported ${filename}.`);
-});
+  setStatus(`Download requested: ${filename}.`);
+}));
 /**
  * How the plan exports should be laid out: fitted to a pixel width, or on a
  * real sheet at a true scale. The sheet select carries paper and orientation
@@ -537,20 +545,20 @@ function planOptions() {
   };
 }
 
-ui.exportSvg.addEventListener('click', () => {
+ui.exportSvg.addEventListener('click', () => runExport(ui.exportSvg, () => {
   const filename = exportName('.svg');
   downloadSvg(store.document, { ...planOptions(), filename });
-  setStatus(`Exported ${filename}.`);
-});
-ui.exportPng.addEventListener('click', async () => {
+  setStatus(`Download requested: ${filename}.`);
+}));
+ui.exportPng.addEventListener('click', () => runExport(ui.exportPng, async () => {
   const filename = exportName('.png');
   try {
     await downloadPng(store.document, { ...planOptions(), filename });
-    setStatus(`Exported ${filename}.`);
+    setStatus(`Download requested: ${filename}.`);
   } catch (error) {
     setStatus(`Could not export the PNG: ${error.message}`, 'error');
   }
-});
+}));
 
 ui.annotate.checked = preferences.annotateExports;
 ui.annotate.addEventListener('change', () => {
