@@ -9,6 +9,7 @@ struct PlotEditorView: View {
     @State private var showingExport = false
     @State private var exportFile = PlotCSVFile(text: "")
     @State private var exportError: String?
+    @State private var showingMeasurementImport = false
 
     private static let canvasSpace = "canvas"
 
@@ -44,6 +45,12 @@ struct PlotEditorView: View {
             .onChange(of: geo.size) { canvasSize = $0 }
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
+        .sheet(isPresented: $showingMeasurementImport) {
+            MeasurementImportView(canvasSize: canvasSize,
+                                  initialDistance: viewModel.doc.abDistance, initialUnit: viewModel.doc.unit) {
+                viewModel.importMeasurements($0)
+            }
+        }
         .fileExporter(isPresented: $showingExport, document: exportFile,
                       contentType: .commaSeparatedText, defaultFilename: "ABPlot-coordinates") { result in
             if case .failure(let error) = result {
@@ -210,6 +217,12 @@ struct PlotEditorView: View {
                 }
 
                 Menu {
+                    Button {
+                        distanceFieldFocused = false
+                        showingMeasurementImport = true
+                    } label: {
+                        Label("Scan measurements", systemImage: "text.viewfinder")
+                    }
                     Button {
                         distanceFieldFocused = false
                         do {

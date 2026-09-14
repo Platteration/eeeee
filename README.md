@@ -38,6 +38,27 @@ iOS 16+, iPhone only.
   Shift-Command-Z. The last 100 edits are available during the current session;
   the restored plot autosaves, but history starts fresh on relaunch.
 
+### Scan measurement tables (OCR)
+- Choose **Plot options → Scan measurements**, then take a photo or select an
+  existing image. Apple Vision reads text on-device; no cloud OCR service or API
+  key is needed. You can also paste or type rows into the same review screen.
+- Enter the source's **A–B distance** and **unit**. Choose the column meaning:
+  - **Distances from A/B**: `P1 3.0 4.0` means P1 is 3 units from A and 4 from B.
+    For a baseline of 5 this is a valid triangle. Choose Above or Below A→B for
+    each point, since two distances alone cannot determine the side.
+  - **Baseline offsets**: `P1 2.0 -1.0` means 2 units along A→B and 1 unit above
+    the baseline. Positive perpendicular offsets go below A→B.
+- Review the source photo and recognized text, correct misread digits, and
+  remove headings or unrelated notes. Each row needs a unique label and two
+  numbers. Spaces, commas, and semicolons can separate columns; decimal commas
+  require spaces or semicolons between columns. A and B are reserved labels.
+- Check the point preview, then **Use measurements → Replace plot**. Import
+  replaces the current plot in one undoable, autosaved edit. Invalid rows or
+  impossible A/B distance pairs block import. Up to 500 points are supported.
+- Clear printed tables work best. Handwriting, skewed tables, and annotated
+  sketches may need manual correction; this does not infer geometry from a drawing.
+  If camera access is unavailable, use the photo picker or paste/type data.
+
 ### Export coordinates
 - Choose **Plot options → Export coordinates (CSV)** and save to Files.
   Add a plotted point and a valid A–B baseline/distance to enable export.

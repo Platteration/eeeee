@@ -98,6 +98,15 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
+    /// The review flow supplies a fully validated document. Record replacement
+    /// as one edit so Undo restores every prior point, reference, and unit.
+    func importMeasurements(_ document: PlotDocument) {
+        doc = document
+        selectedPointID = nil
+        nextLabelNumber = (document.points.compactMap { Int($0.label) }.max() ?? 0) + 1
+        save()
+    }
+
     func retrySaving() {
         save()
     }

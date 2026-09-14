@@ -19,7 +19,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>ABPlot uses the camera for augmented reality to place your plotted points in the real world.</string>
+	<string>ABPlot uses the camera to read measurement tables and to place your plotted points in augmented reality.</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arkit</string>
