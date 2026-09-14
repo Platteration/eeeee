@@ -201,6 +201,7 @@ function captureTableFocus() {
     column: active.dataset.column ?? (active.matches('button') ? 'delete' : 'row'),
     start: active.selectionStart ?? null,
     end: active.selectionEnd ?? null,
+    value: active.matches('input') ? active.value : null,
   };
 }
 
@@ -210,6 +211,7 @@ function restoreTableFocus(focus) {
   const input = focus.column === 'row' ? row : focus.column === 'delete' ? row?.querySelector('button')
     : row?.querySelector(`[data-column="${CSS.escape(focus.column)}"]`);
   if (!input) return;
+  if (focus.value !== null && input.matches('input')) input.value = focus.value;
   input.focus();
   if (focus.start !== null) input.setSelectionRange(focus.start, focus.end);
 }
@@ -223,7 +225,9 @@ function measureInput(row, column, text) {
   input.value = text;
   input.inputMode = 'decimal';
   input.setAttribute('aria-label', `${column.head} for point ${row.label}`);
-  input.addEventListener('change', () => {
+  let committedValue = text;
+  const commit = () => {
+    if (input.value === committedValue) return;
     const entered = input.value.trim();
     // Read "1,5" as 1.5: the app writes a decimal point, but a comma is what
     // half the world's keyboards and tape measures say.
@@ -234,9 +238,13 @@ function measureInput(row, column, text) {
       setStatus(`“${entered}” is not a distance.`, 'error');
       return;
     }
+    committedValue = input.value;
     moveTo(row, column.key, typed);
-  });
+  };
+  input.addEventListener('change', commit);
+  input.addEventListener('blur', commit);
   input.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab' || event.key === 'Enter') commit();
     if (event.key === 'Enter') input.blur();
     if (event.key === 'Escape') {
       input.value = text;
@@ -250,7 +258,11 @@ function measureInput(row, column, text) {
 /** Move a point so that its `along` or `perp` reads `value` in the doc's unit. */
 function moveTo(row, key, value) {
   const doc = store.document;
-  const offsets = { along: row.along, perp: row.perp, [key]: toMeters(value, doc.unit) };
+  // A previous cell may have committed before the next animation frame draws
+  // its replacement. Always preserve the other coordinate from current state.
+  const current = measurePoints(doc).find((point) => point.id === row.id);
+  if (!current) return;
+  const offsets = { along: current.along, perp: current.perp, [key]: toMeters(value, doc.unit) };
   const position = positionForOffsets(doc, offsets);
   if (!position) return;
   store.apply((draft) => {

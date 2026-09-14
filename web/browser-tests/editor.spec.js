@@ -49,7 +49,9 @@ test('canceled touch and shift click never add a point', async ({ page }) => {
 test('an interrupted drag saves its last position as one undoable edit', async ({ page }) => {
   const handle = page.locator('[data-handle="A"]');
   const svg = page.locator('#canvas');
-  const box = await handle.boundingBox();
+  const hitTarget = handle.locator('[data-hit-target]');
+  await expect(hitTarget).toBeVisible();
+  const box = await hitTarget.boundingBox();
   const start = { pointerId: 92, pointerType: 'touch', button: 0, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 };
   await handle.dispatchEvent('pointerdown', start);
   await svg.dispatchEvent('pointermove', { ...start, clientX: start.clientX + 25 });
