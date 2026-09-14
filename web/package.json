@@ -5,14 +5,20 @@
   "description": "Browser companion to the ABPlot iOS app: sketch a plot against an A–B baseline and read it back in real-world units.",
   "type": "module",
   "scripts": {
+    "postinstall": "node tools/prepare-ocr.js",
+    "build:ocr": "node tools/prepare-ocr.js",
     "start": "node tools/serve.js",
     "test": "node --test test/*.test.js",
     "test:browser": "playwright test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "7.0.0"
   }
 }

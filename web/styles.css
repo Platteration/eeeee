@@ -568,6 +568,8 @@ dialog::backdrop { background: #0008; }
 dialog textarea { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 16px; padding: 10px; font: inherit; }
 .entry-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0; }
 .entry-options label { display: flex; flex-direction: column; gap: 5px; }
+.entry-options label.checkbox { flex-direction: row; align-items: center; }
+dialog input[type="checkbox"] { min-height: auto; }
 dialog button, dialog select, dialog input { min-height: 44px; max-width: 100%; }
 dialog table input { width: 100px; }
 #entry-preview svg { width: 100%; height: auto; max-height: 320px; }

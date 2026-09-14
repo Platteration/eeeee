@@ -21,6 +21,7 @@ import { PREFERENCES_KEY, readPreferences } from './preferences.js';
 import { LatestOperation, withTimeout } from './operations.js';
 import { downloadText } from './exporters.js';
 import { setupImportPanel } from './importPanel.js';
+import { setupOcrPanel } from './ocrPanel.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -234,8 +235,8 @@ function measureInput(row, column, text) {
       setStatus(`“${entered}” is not a distance.`, 'error');
       return;
     }
-    committedValue = input.value;
-    moveTo(row, column.key, typed);
+    if (moveTo(row, column.key, typed)) committedValue = input.value;
+    else { input.value = text; input.setAttribute('aria-invalid', 'true'); }
   };
   input.addEventListener('change', commit);
   input.addEventListener('blur', commit);
@@ -257,14 +258,14 @@ function moveTo(row, key, value) {
   // A previous cell may have committed before the next animation frame draws
   // its replacement. Always preserve the other coordinate from current state.
   const current = measurePoints(doc).find((point) => point.id === row.id);
-  if (!current) return;
+  if (!current) return false;
   const offsets = { along: current.along, perp: current.perp, [key]: toMeters(value, doc.unit) };
   const position = positionForOffsets(doc, offsets);
-  if (!position) { setStatus('These measurements are outside the supported range.', 'error'); return; }
+  if (!position) { setStatus('These measurements are outside the supported range.', 'error'); return false; }
   try { store.apply((draft) => {
     const point = draft.points.find((p) => p.id === row.id);
     if (point) point.position = position;
-  }); } catch (error) { setStatus(error.message, 'error'); }
+  }); return true; } catch (error) { setStatus(error.message, 'error'); return false; }
 }
 
 function renderTable(doc) {
@@ -418,6 +419,7 @@ async function importFile(file) {
   if (!file) return;
   const current = fileOperation.start();
   const revision = store.revision;
+  $('cancel-file').hidden = false;
   setStatus(`Reading ${file.name}…`);
   try {
     if (file.size > 5 * 1024 * 1024) throw new Error('Choose a plot JSON file smaller than 5 MB');
@@ -427,6 +429,8 @@ async function importFile(file) {
     loadDocument(doc, `Imported ${file.name}. Undo restores the previous plot.`);
   } catch (error) {
     if (current()) setStatus(`Could not import ${file.name}: ${error.message}`, 'error');
+  } finally {
+    if (current()) $('cancel-file').hidden = true;
   }
 }
 
@@ -503,7 +507,8 @@ ui.clear.addEventListener('click', () => {
   setStatus(`Cleared ${count} point${count === 1 ? '' : 's'}. Ctrl+Z to undo.`);
 });
 
-ui.reset.addEventListener('click', () => loadDocument(defaultDocument(), 'Started a new plot. Ctrl+Z to undo.'));
+ui.reset.addEventListener('click', () => { fileOperation.cancel(); $('cancel-file').hidden = true; loadDocument(defaultDocument(), 'Started a new plot. Ctrl+Z to undo.'); });
+$('cancel-file').addEventListener('click', () => { fileOperation.cancel(); $('cancel-file').hidden = true; setStatus('File read cancelled.'); });
 
 ui.importButton.addEventListener('click', () => ui.file.click());
 ui.file.addEventListener('change', async () => {
@@ -695,4 +700,4 @@ editor.fit();
 
 // Handy in the console, and how the smoke tests drive the app.
 window.abplot = { store, editor };
-setupImportPanel({ store, editor, setStatus });
+setupOcrPanel(setupImportPanel({ store, editor, setStatus }));

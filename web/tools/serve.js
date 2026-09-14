@@ -10,6 +10,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { configuredOcr } from '../server/ocr-api.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const port = Number(process.env.PORT ?? 8000);
@@ -43,10 +44,16 @@ export function resolveRequestPath(root, urlPath) {
   return target === base || target.startsWith(base + sep) ? target : null;
 }
 
+const ocr = configuredOcr();
 const server = createServer(async (request, response) => {
+  if (await ocr(request, response)) return;
   const target = resolveRequestPath(root, request.url ?? '/');
   try {
     if (!target) throw new Error('outside root');
+    const relative = target.slice(root.length + 1).split(sep).join('/');
+    if (!['index.html', 'styles.css'].includes(relative) && !relative.startsWith('src/') && !relative.startsWith('vendor/')) {
+      response.writeHead(404); response.end('Not found'); return;
+    }
     const info = await stat(target);
     const file = info.isDirectory() ? join(target, 'index.html') : target;
     const size = info.isDirectory() ? (await stat(file)).size : info.size;
@@ -65,6 +72,9 @@ const server = createServer(async (request, response) => {
     response.end(status === 404 ? 'Not found\n' : 'Could not read file\n');
   }
 });
+
+server.requestTimeout = 70000;
+server.headersTimeout = 10000;
 
 // Importing this module for its exports (the tests do) must not open a port.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
