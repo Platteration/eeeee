@@ -2,7 +2,7 @@ name: iOS build
 
 on:
   push:
-    branches: ["codex/abplot-editor-qol"]
+    branches: ["claude/ios-ab-plotting-ar-232m3z"]
   pull_request:
 
 permissions:
