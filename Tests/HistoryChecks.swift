@@ -90,6 +90,56 @@ struct HistoryChecks {
         var redoCount = 0
         while bounded.canRedo { bounded.redo(); redoCount += 1 }
         precondition(redoCount == 100 && bounded.doc.abDistance == 107)
-        print("History checks passed: edits, drag grouping, redo invalidation, labels, units, persistence, and history limit")
+
+        let fitting = PlotViewModel(saveURL: directory.appendingPathComponent("fit.json"))
+        fitting.moveA(to: CGPoint(x: -400, y: 800))
+        fitting.moveB(to: CGPoint(x: 100, y: 1200))
+        fitting.endDrag()
+        fitting.addPoint(at: CGPoint(x: 1200, y: -300))
+        fitting.addPoint(at: CGPoint(x: -600, y: 1500))
+        let beforeFit = fitting.doc
+        let coordinates = beforeFit.points.map {
+            PlotMath.abCoordinates(of: $0.position, a: beforeFit.pointA, b: beforeFit.pointB)!
+        }
+        fitting.fitPlot(in: CGSize(width: 320, height: 240))
+        let afterFit = fitting.doc
+        for point in [afterFit.pointA, afterFit.pointB] + afterFit.points.map(\.position) {
+            precondition(point.x >= 28 - 1e-10 && point.x <= 292 + 1e-10)
+            precondition(point.y >= 28 - 1e-10 && point.y <= 212 + 1e-10)
+        }
+        precondition(afterFit.abDistanceMeters == beforeFit.abDistanceMeters)
+        precondition(afterFit.points.map(\.id) == beforeFit.points.map(\.id))
+        for (index, point) in afterFit.points.enumerated() {
+            let result = PlotMath.abCoordinates(of: point.position, a: afterFit.pointA, b: afterFit.pointB)!
+            precondition(abs(result.s - coordinates[index].s) < 1e-10)
+            precondition(abs(result.t - coordinates[index].t) < 1e-10)
+        }
+        // A repeated fit must not consume an undo step.
+        fitting.fitPlot(in: CGSize(width: 320, height: 240))
+        fitting.undo()
+        precondition(fitting.doc == beforeFit)
+        fitting.redo()
+        precondition(fitting.doc == afterFit)
+        precondition(PlotViewModel(saveURL: directory.appendingPathComponent("fit.json")).doc == afterFit)
+        fitting.fitPlot(in: .zero)
+        fitting.fitPlot(in: CGSize(width: 40, height: 40))
+        precondition(fitting.doc == afterFit)
+
+        // Horizontal, vertical, and coincident plots must remain finite.
+        let degenerate = PlotViewModel(saveURL: directory.appendingPathComponent("line.json"))
+        degenerate.fitPlot(in: CGSize(width: 320, height: 240))
+        precondition(degenerate.doc.pointA.y == 120 && degenerate.doc.pointB.y == 120)
+        degenerate.moveA(to: CGPoint(x: 0, y: -500))
+        degenerate.moveB(to: CGPoint(x: 0, y: 500))
+        degenerate.endDrag()
+        degenerate.fitPlot(in: CGSize(width: 320, height: 240))
+        precondition(degenerate.doc.pointA.x == 160 && degenerate.doc.pointB.x == 160)
+        degenerate.moveA(to: .zero)
+        degenerate.moveB(to: .zero)
+        degenerate.endDrag()
+        degenerate.fitPlot(in: CGSize(width: 320, height: 240))
+        precondition(degenerate.doc.pointA == CGPoint(x: 160, y: 120))
+        precondition(degenerate.doc.pointB == degenerate.doc.pointA)
+        print("Editor checks passed: history, drag grouping, labels, units, persistence, fit geometry, and degenerate bounds")
     }
 }

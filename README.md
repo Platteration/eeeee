@@ -23,6 +23,11 @@ iOS 16+, iPhone only.
 - The editor explains what is needed before entering AR: a positive distance,
   separated A/B handles, and at least one plotted point.
 - **Clear all points** asks for confirmation and keeps A, B, and the distance.
+- Use **Plot options → Fit plot to screen** to bring A, B, and all plotted
+  points into view after opening a plot on a smaller screen. This preserves
+  proportions and the declared distance, autosaves, and supports Undo.
+- Points and reference handles have larger touch targets; new points and drags
+  stay inset from the canvas edges so their handles remain reachable.
 - **Undo** and **Redo** recover point additions, deletions, whole drags, clearing,
   and distance/unit edits. External keyboards support Command-Z and
   Shift-Command-Z. The last 100 edits are available during the current session;

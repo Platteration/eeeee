@@ -4,6 +4,7 @@ struct PlotEditorView: View {
     @EnvironmentObject private var viewModel: PlotViewModel
     @FocusState private var distanceFieldFocused: Bool
     @State private var showingClearConfirmation = false
+    @State private var canvasSize: CGSize = .zero
 
     private static let canvasSpace = "canvas"
 
@@ -35,6 +36,8 @@ struct PlotEditorView: View {
                 }
             }
             .coordinateSpace(name: Self.canvasSpace)
+            .onAppear { canvasSize = geo.size }
+            .onChange(of: geo.size) { canvasSize = $0 }
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
         .toolbar {
@@ -95,7 +98,12 @@ struct PlotEditorView: View {
                 .minimumScaleFactor(0.5)
         }
         .frame(width: 24, height: 24)
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
         .position(point.position)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Point \(point.label)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .onTapGesture {
             viewModel.selectedPointID = isSelected ? nil : point.id
         }
@@ -122,9 +130,13 @@ struct PlotEditorView: View {
                 .foregroundColor(.white)
         }
         .frame(width: 32, height: 32)
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
         .position(position)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Reference point \(label)")
         .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.canvasSpace))
+            DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.canvasSpace))
                 .onChanged { move(clamp($0.location, in: size)) }
                 .onEnded { _ in viewModel.endDrag() }
         )
@@ -172,6 +184,13 @@ struct PlotEditorView: View {
                 }
 
                 Menu {
+                    Button {
+                        distanceFieldFocused = false
+                        viewModel.fitPlot(in: canvasSize)
+                    } label: {
+                        Label("Fit plot to screen", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+                    .disabled(canvasSize.width <= 56 || canvasSize.height <= 56)
                     Button("Clear all points", role: .destructive) {
                         distanceFieldFocused = false
                         showingClearConfirmation = true
@@ -193,9 +212,11 @@ struct PlotEditorView: View {
     }
 
     private func clamp(_ p: CGPoint, in size: CGSize) -> CGPoint {
-        CGPoint(
-            x: min(max(p.x, 0), size.width),
-            y: min(max(p.y, 0), size.height)
+        let insetX = min(22, max(0, size.width / 2))
+        let insetY = min(22, max(0, size.height / 2))
+        return CGPoint(
+            x: min(max(p.x, insetX), max(insetX, size.width - insetX)),
+            y: min(max(p.y, insetY), max(insetY, size.height - insetY))
         )
     }
 }

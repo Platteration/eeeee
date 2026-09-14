@@ -97,6 +97,43 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
+    /// Apply one uniform scale and translation to every canvas position.
+    /// The declared distance and coordinates relative to A/B stay unchanged.
+    func fitPlot(in size: CGSize) {
+        let padding: CGFloat = 28
+        guard size.width.isFinite, size.height.isFinite,
+              size.width > padding * 2, size.height > padding * 2 else { return }
+        let positions = [doc.pointA, doc.pointB] + doc.points.map(\.position)
+        guard positions.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return }
+        let minX = positions.map(\.x).min()!
+        let maxX = positions.map(\.x).max()!
+        let minY = positions.map(\.y).min()!
+        let maxY = positions.map(\.y).max()!
+        let width = maxX - minX
+        let height = maxY - minY
+        guard width.isFinite, height.isFinite else { return }
+        let scaleX = width > 0 ? (size.width - padding * 2) / width : .infinity
+        let scaleY = height > 0 ? (size.height - padding * 2) / height : .infinity
+        let scale = width == 0 && height == 0 ? 1 : min(scaleX, scaleY)
+        guard scale.isFinite, scale > 0 else { return }
+        let center = CGPoint(x: minX + width / 2, y: minY + height / 2)
+        func fitted(_ position: CGPoint) -> CGPoint {
+            CGPoint(x: (position.x - center.x) * scale + size.width / 2,
+                    y: (position.y - center.y) * scale + size.height / 2)
+        }
+        // Repeated fitting can differ only by floating-point rounding.
+        guard positions.contains(where: {
+            let next = fitted($0)
+            return abs(next.x - $0.x) > 0.001 || abs(next.y - $0.y) > 0.001
+        }) else { return }
+        doc.pointA = fitted(doc.pointA)
+        doc.pointB = fitted(doc.pointB)
+        for index in doc.points.indices {
+            doc.points[index].position = fitted(doc.points[index].position)
+        }
+        save()
+    }
+
     func deleteSelectedPoint() {
         guard let id = selectedPointID else { return }
         doc.points.removeAll { $0.id == id }
