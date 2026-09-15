@@ -44,6 +44,7 @@ export class PlotEditor extends EventTarget {
   /** Live pointers, so a second finger can turn a drag into a pinch. */
   #pointers = new Map();
   #pinch = null;
+  #reviewWarnings = new Set();
 
   constructor(svg, store) {
     super();
@@ -52,6 +53,7 @@ export class PlotEditor extends EventTarget {
 
     this.#layers = {
       grid: el('g', { 'data-layer': 'grid' }),
+      outline: el('g', { 'data-layer': 'outline', 'pointer-events': 'none' }),
       baseline: el('g', { 'data-layer': 'baseline' }),
       points: el('g', { 'data-layer': 'points' }),
       handles: el('g', { 'data-layer': 'handles' }),
@@ -74,6 +76,12 @@ export class PlotEditor extends EventTarget {
 
     store.subscribe(() => this.render());
     new ResizeObserver(() => this.render()).observe(svg);
+  }
+
+  setReviewWarnings(ids) {
+    const next = new Set(ids);
+    if (next.size === this.#reviewWarnings.size && [...next].every(id => this.#reviewWarnings.has(id))) return;
+    this.#reviewWarnings = next; this.render();
   }
 
   /** Canvas units per CSS pixel -- the zoom level, and the unit of "screen size". */
@@ -197,6 +205,7 @@ export class PlotEditor extends EventTarget {
 
     if (role === 'handle') {
       const which = target.dataset.handle;
+      this.dispatchEvent(new CustomEvent('reference', { detail: which }));
       const anchor = which === 'A' ? this.#store.document.pointA : this.#store.document.pointB;
       this.#store.begin();
       this.#gesture = {
@@ -373,6 +382,8 @@ export class PlotEditor extends EventTarget {
     const px = this.#view.unitsPerPixel;
 
     this.#renderGrid(doc, box, px);
+    this.#layers.outline.replaceChildren();
+    if (doc.points.length >= 3 && doc.outlineDirection !== 'off') this.#layers.outline.append(el('polygon', { points: doc.points.map(p => `${p.position.x},${p.position.y}`).join(' '), fill: 'var(--outline-fill)', stroke: 'var(--accent)', 'stroke-width': 1.5 * px }));
     this.#renderBaseline(doc, px);
     this.#renderPoints(doc, px);
     this.#renderHandles(doc, px);
@@ -461,8 +472,9 @@ export class PlotEditor extends EventTarget {
       const group = el('g', {
         'data-role': 'point',
         'data-id': point.id,
-        class: selected ? 'point selected' : 'point',
+        class: `${selected ? 'point selected' : 'point'}${point.needsRemeasure ? ' needs-remeasure' : ''}${this.#reviewWarnings.has(point.id) ? ' order-warning' : ''}`,
       });
+      group.append(el('title', {}, `${point.label}${point.needsRemeasure ? ' · needs remeasurement' : ''}${point.note ? ` · ${point.note}` : ''}`));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r: 22 * px,
         fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r, class: 'point-dot' }));
@@ -501,7 +513,7 @@ export class PlotEditor extends EventTarget {
       ['A', doc.pointA],
       ['B', doc.pointB],
     ]) {
-      const group = el('g', { 'data-role': 'handle', 'data-handle': name, class: `handle handle-${name}` });
+      const group = el('g', { 'data-role': 'handle', 'data-handle': name, class: `handle handle-${name}${doc.baselineNeedsRemeasure ? ' needs-remeasure' : ''}` });
       group.append(el('circle', { cx: position.x, cy: position.y, r: 22 * px,
         fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: position.x, cy: position.y, r, class: 'handle-dot' }));

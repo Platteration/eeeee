@@ -1,3 +1,4 @@
+import { setupReviewPanel } from './reviewPanel.js';
 /**
  * Wiring: the store owns the plot, the editor draws it, this module keeps the
  * panel, the keyboard and the file buttons in step with both.
@@ -304,6 +305,8 @@ function renderTable(doc) {
       event.stopPropagation();
     });
     labelCell.append(input);
+    const sourcePoint = doc.points.find(p => p.id === row.id);
+    if (sourcePoint?.needsRemeasure) { const badge = document.createElement('span'); badge.className = 'remeasure-badge'; badge.textContent = '!'; badge.title = 'Needs remeasurement'; badge.setAttribute('aria-label', 'Needs remeasurement'); labelCell.append(badge); }
     tr.append(labelCell);
 
     for (const column of columns) {
@@ -333,6 +336,10 @@ function renderTable(doc) {
       deletePoint(row.id);
     });
     actions.append(remove);
+    const review = document.createElement('button'); review.type = 'button'; review.textContent = 'Review'; review.dataset.column = 'review'; review.className = 'row-review';
+    review.setAttribute('aria-label', `Review measurements for point ${row.label}`);
+    review.addEventListener('click', event => { event.stopPropagation(); store.select(row.id); document.getElementById('review-details').open = true; document.getElementById('point-review').scrollIntoView({ block: 'nearest' }); });
+    actions.append(review);
     tr.append(actions);
 
     tr.addEventListener('click', (event) => {
@@ -703,3 +710,4 @@ editor.fit();
 window.abplot = { store, editor };
 setupOcrPanel(setupImportPanel({ store, editor, setStatus }));
 setupPhotoPanel({ store, editor, setStatus });
+setupReviewPanel({ store, editor });

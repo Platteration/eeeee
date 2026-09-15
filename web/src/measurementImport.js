@@ -62,7 +62,8 @@ export function reviewMeasurements(rows, doc, { mode = 'offsets', unit = doc.uni
       let s = first / baseline, t = second / baseline;
       if (mode === 'distances') {
         if (first < 0 || second < 0) throw new Error('Distances from A and B cannot be negative.');
-        if (s + t < 1 - 1e-12 || Math.abs(s - t) > 1 + 1e-12) throw new Error('These distances cannot form a triangle with A–B.');
+        if (s + t < 1 - 1e-12) throw new Error('Impossible triangle: distances from A and B added together are shorter than A–B. Remeasure this point or check the baseline.');
+        if (Math.abs(s - t) > 1 + 1e-12) throw new Error('Impossible triangle: the difference between distances from A and B is longer than A–B. Remeasure this point or check the baseline.');
         const along = (s * s - t * t + 1) / 2;
         const height = s * s - along * along;
         if (height < -1e-10) throw new Error('These distances cannot form a triangle with A–B.');

@@ -49,6 +49,24 @@ untouched until you explicitly replace it; download its recovery copy first.
 
 ### Measuring, both ways
 
+Follow **Set your A–B reference → Enter measurements → Save & share**. Walk the
+rim in either direction and add points in that order. The plan connects the
+boundary points so their sequence is visible.
+
+Click a point or its table **Review** button to enter fresh distances from A and
+B, move it earlier/later in the sequence, or mark **Needs remeasurement** and
+leave a **Note to self**. Click A or B to review the reference pair. **Next to
+remeasure** visits marked items. Notes and flags autosave and travel with plot
+JSON and photo projects; a successful remeasurement clears that point's flag.
+Dragging preserves the reminder. Undo restores measurement edits and flags.
+
+Impossible A/B triangles block saving and explain which readings conflict with
+the baseline. Outline checks flag crossings, overlapping points and flat shapes,
+and show candidate points to review. Correct the order first; remeasure if the
+order is right. Concave shapes are valid, and these checks cannot identify a bad
+reading with certainty. Choose either walking direction, request a specific one,
+reverse the sequence, or disable closed-outline checks for other kinds of plots.
+
 The table reads the sketch, and the sketch reads the table: **Along** and
 **Perp.** are editable. Together they *are* the point's position, so typing a
 distance moves the point exactly there — click roughly where a feature sits,
@@ -134,6 +152,13 @@ uppercase UUIDs, with unique replacements for invalid or duplicate IDs, so
 every point remains editable and exports successfully to iOS. File uploads
 are limited to 5 MB; distances must be JSON numbers.
 
+Optional review metadata consists of per-point `note` and `needsRemeasure`, plus
+document `baselineNote`, `baselineNeedsRemeasure`, and `outlineDirection`
+(`clockwise`, `counterclockwise`, or `off`; omitted means either direction).
+Notes are limited to 1,000 characters in the web editor. The updated iOS model
+preserves these fields through file round trips; its UI does not edit them yet.
+Older apps may discard optional metadata when saving.
+
 Canvas coordinates carry no units and no absolute meaning — only each point's
 position *relative to A and B* matters, which is why a plot drawn in a browser
 window lands correctly on a phone screen of a different size.
@@ -191,7 +216,7 @@ Canceled touches and Shift-clicks do not create points. Canvas markers have
 44-pixel hit areas at every zoom, and touch-device form controls are larger.
 # Reviewed measurements and OCR
 
-Choose **Enter measurements…** to paste a table or open CSV/TSV/text. Select
+Choose **Enter measurements** to paste a table or open CSV/TSV/text. Select
 along/perpendicular offsets or distances from A/B, input units, decimal separator,
 and column numbers. An optional header is skipped only when selected. Preview,
 correct or explicitly remove invalid rows, then add points or replace existing
@@ -210,7 +235,7 @@ available. A corrupt previous save stays downloadable until replacement succeeds
 
 ### Pool photo overlays
 
-Open **Pool photo overlay** and choose a JPEG, PNG or WebP photo. Set the measured
+Open **Match a pool photo** and choose a JPEG, PNG or WebP photo. Set the measured
 A–B distance and units. Both entry workflows are supported:
 
 - **Match an existing point:** choose A, B or a measured point and click its

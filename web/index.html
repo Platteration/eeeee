@@ -16,7 +16,7 @@
     <header class="app-bar" data-editor-region inert>
       <div class="brand">
         <h1>ABPlot</h1>
-        <p>Plot points against an A–B baseline, then read them in real units.</p>
+        <p>Measure your pool. Check each point. Keep a clear plan.</p>
       </div>
       <div class="app-bar-actions">
         <button id="undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
@@ -48,7 +48,7 @@
           </div>
         </div>
 
-        <p id="empty-hint" class="empty-hint">Click anywhere to drop your first point.</p>
+        <p id="empty-hint" class="empty-hint">Add your A/B readings, or click the rim points in walking order.</p>
       </section>
 
       <aside class="panel">
@@ -65,7 +65,7 @@
         </section>
 
         <section class="panel-section">
-          <h2>Scale</h2>
+          <h2>1 · Set your A–B reference</h2>
           <div class="field-row">
             <label for="ab-distance">A–B distance</label>
             <input id="ab-distance" type="number" min="0" step="0.01" inputmode="decimal" />
@@ -74,12 +74,17 @@
               <option value="feet">ft</option>
             </select>
           </div>
-          <p id="scale-note" class="note"></p>
+          <p class="note">Place A and B where you measured from. Drag either handle on the plan, then enter the distance between them.</p><p id="scale-note" class="note"></p>
+          <div class="button-grid primary-actions"><button id="bulk-entry" type="button">2 · Enter measurements</button><button id="pool-photo-button" type="button">Match a pool photo</button></div>
+          <p class="note">Walk around the rim in one direction. Add points in that same sequence.</p>
         </section>
+
+        <section id="point-review" class="panel-section"></section>
+        <section id="outline-review" class="panel-section"></section>
 
         <section class="panel-section panel-grow">
           <div class="section-head">
-            <h2>Points</h2>
+            <h2>Your point sequence</h2>
             <div class="section-actions">
               <button id="add" type="button" class="link-button">Add point</button>
               <button id="clear" type="button" class="link-button">Clear all</button>
@@ -98,10 +103,8 @@
         </section>
 
         <section class="panel-section">
-          <h2>File</h2>
+          <h2>3 · Save & share</h2>
           <div class="button-grid">
-            <button id="bulk-entry" type="button">Enter measurements…</button>
-            <button id="pool-photo-button" type="button">Pool photo overlay…</button>
             <button id="import" type="button">Import JSON…</button>
             <button id="export-json" type="button">Export JSON</button>
             <button id="export-csv" type="button">Export CSV</button>
@@ -154,6 +157,7 @@
               Or type: the <b>Along</b> and <b>Perp.</b> cells are editable, so a distance off a tape
               measure places a point exactly.
             </li>
+            <li>Click A, B, or a plotted point to review it. Use <b>Needs remeasurement</b> and a note for anything to check on site.</li>
             <li>Drag the green <b>A</b> and red <b>B</b> handles to set the baseline.</li>
             <li>The declared A–B distance scales everything else — every measurement follows from it.</li>
             <li>Drag with the background, middle button or <kbd>Shift</kbd> to pan; scroll to zoom.</li>

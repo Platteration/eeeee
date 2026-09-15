@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/'); await expect.poll(() => page.evaluate(() => Boolean(window.abplot))).toBe(true);
   expect(errors).toEqual([]);
 });
-const open = async page => { await page.getByRole('button', { name: 'Enter measurements…', exact: true }).click(); };
+const open = async page => { await page.getByRole('button', { name: '2 · Enter measurements', exact: true }).click(); };
 test('review, correct, apply and undo 250 points', async ({ page }) => {
   await open(page);
   await page.locator('#entry-text').fill(Array.from({ length: 250 }, (_, i) => `P${i},${i / 10},${i % 10}`).join('\n'));

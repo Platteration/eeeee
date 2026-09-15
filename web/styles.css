@@ -610,3 +610,33 @@ dialog table input { width: 100px; }
 
 #startup { padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
 #startup[hidden] { display: none; }
+
+/* A quiet, guided measurement workspace. */
+:root { --bg: #f5f7fa; --outline-fill: #0a84ff0c; --radius: 12px; }
+.app-bar { padding: 14px 20px; }
+.brand h1 { font-size: 1.2rem; }
+.panel-section { padding: 18px 20px; }
+.panel-section h2 { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text); margin-bottom: 12px; }
+.primary-actions { margin-top: 16px; }
+#bulk-entry, #remeasure-save { background: var(--accent); color: white; border-color: var(--accent); }
+#point-review details > summary { font-weight: 650; cursor: pointer; min-height: 32px; }
+#point-review details[open] > summary { margin-bottom: 14px; }
+#point-review label:not(.checkbox), #outline-review > label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+#point-review input:not([type=checkbox]), #point-review select, #point-review textarea, #outline-direction { width: 100%; box-sizing: border-box; }
+#point-review textarea { padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); color: var(--text); font: inherit; resize: vertical; }
+#point-review .checkbox { display: flex; align-items: center; gap: 8px; margin: 16px 0 8px; }
+.measurement-pair { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+#remeasure-status { min-height: 4.5em; }
+#remeasure-status[data-tone=error] { color: var(--danger); font-weight: 600; }
+#point-review [hidden] { display: none; }
+.outline-warning { padding: 12px; margin: 10px 0; background: #fff7e6; color: #613d08; border: 1px solid #edcf94; border-radius: 10px; }
+.outline-warning p { margin: 0 0 8px; line-height: 1.5; }
+.outline-warning button { margin: 3px; min-height: 36px; }
+.remeasure-badge { display: inline-block; margin-left: 4px; color: #995a00; font-weight: 800; }
+.point.needs-remeasure .point-ring, .point.order-warning .point-ring, .handle.needs-remeasure .handle-ring { stroke: #d48a0b; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.row-review { margin-left: 5px; font-size: 12px; padding: 5px 8px; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #101319; --outline-fill: #399eff13; }
+  .outline-warning { background: #352b18; color: #ffdc9a; border-color: #705221; }
+  dialog { color-scheme: light; }
+}

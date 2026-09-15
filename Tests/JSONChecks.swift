@@ -9,6 +9,14 @@ struct JSONChecks {
         let web = Data(#"{"name":"North lawn","pointA":[100,400],"pointB":[300,400],"abDistance":10,"unit":"feet","points":[{"id":"8F3B0C1E-1111-4222-8333-444455556666","position":[200,300],"label":"9223372036854775807"}]}"#.utf8)
         let doc = try PlotJSON.decode(web)
         precondition(doc.name == "North lawn" && doc.unit == .feet && doc.points.count == 1)
+        var review = doc
+        review.points[0].note = "Remeasure near steps"
+        review.points[0].needsRemeasure = true
+        review.baselineNote = "Check tape sag"
+        review.baselineNeedsRemeasure = true
+        review.outlineDirection = "clockwise"
+        let reviewedRoundTrip = try PlotJSON.decode(PlotJSON.encode(review))
+        precondition(reviewedRoundTrip == review)
         let roundTrip = try PlotJSON.decode(PlotJSON.encode(doc))
         precondition(roundTrip == doc)
         let legacy = try PlotJSON.decode(PlotJSON.encode(.default))

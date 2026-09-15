@@ -4,7 +4,7 @@ import { measurePoints } from './measurements.js';
 export const PHOTO_PROJECT_FORMAT = 'abplot-photo-project';
 export const photoSettings = () => ({ opacity: 0.9, labels: true, distances: false, outline: true, closed: true, project: false });
 export function plotLandmarks(doc) {
-  return [{ id: 'A', label: 'A', position: doc.pointA }, { id: 'B', label: 'B', position: doc.pointB }, ...doc.points];
+  return [{ id: 'A', label: 'A', position: doc.pointA, needsRemeasure: doc.baselineNeedsRemeasure }, { id: 'B', label: 'B', position: doc.pointB, needsRemeasure: doc.baselineNeedsRemeasure }, ...doc.points];
 }
 
 function normalize(points) {
@@ -107,7 +107,7 @@ export function photoOverlaySvg(doc, photo, { selected = null, markerSize = Math
     const { x, y } = point.photo, color = point.id === 'A' ? '#34c759' : point.id === 'B' ? '#ff3b30' : '#00e5ff';
     pieces.push(`<g data-photo-id="${escape(point.id)}"><circle cx="${x}" cy="${y}" r="${size}" fill="${point.matched ? color : '#0008'}" stroke="${selected === point.id ? '#ffea00' : '#fff'}" stroke-width="${size / 5}"/>`);
     if (photo.settings.labels) {
-      let label = point.label;
+      let label = point.label + (point.needsRemeasure ? ' · remeasure' : '');
       const m = measurements.get(point.id);
       if (photo.settings.distances && m?.fromA !== null && m?.fromA !== undefined) {
         const divisor = doc.unit === 'feet' ? 0.3048 : 1, unit = doc.unit === 'feet' ? 'ft' : 'm';

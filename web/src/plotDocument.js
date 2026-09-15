@@ -1,3 +1,4 @@
+import { reviewFields } from './plotReview.js';
 /**
  * The plot document: the same shape the iOS app persists, so a file exported
  * here opens there and vice versa.
@@ -145,12 +146,14 @@ export function parseDocument(input) {
     ids.add(id);
     return {
       id,
+      ...reviewFields(point),
       position: coercePoint(point.position, `points[${index}].position`),
       label: point.label === undefined || point.label === null ? String(index + 1) : String(point.label),
     };
   });
 
   return validateGeometry({
+    ...reviewFields(raw, true),
     name: raw.name === undefined || raw.name === null ? '' : String(raw.name),
     pointA: coercePoint(raw.pointA, 'pointA'),
     pointB: coercePoint(raw.pointB, 'pointB'),
@@ -164,6 +167,7 @@ export function parseDocument(input) {
 export function toWireFormat(doc) {
   validateGeometry(doc);
   return {
+    ...reviewFields(doc, true),
     // Omitted when empty, so an unnamed plot is byte-identical to the phone's.
     ...(doc.name ? { name: doc.name } : {}),
     pointA: [doc.pointA.x, doc.pointA.y],
@@ -172,6 +176,7 @@ export function toWireFormat(doc) {
     unit: doc.unit,
     points: doc.points.map((point) => ({
       id: point.id,
+      ...reviewFields(point),
       position: [point.position.x, point.position.y],
       label: point.label,
     })),

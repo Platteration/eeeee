@@ -17,6 +17,13 @@ The release-readiness pass adds iOS corrupt-save preservation, browser photo
 recovery, HTTP health/security headers, a static deployment artifact, and
 [RELEASE.md](RELEASE.md). Follow that document for launch gates.
 
+The guided web review pass adds point/reference remeasurement reminders and
+notes, direct A/B distance editing, conservative outline-order warnings, and
+manual sequence corrections. `web/src/reviewPanel.js` owns the UI;
+`web/src/plotReview.js` owns pure outline checks and portable metadata. The Swift
+model preserves that metadata without adding an iOS review UI. No automatic
+reordering is performed, and concave pool outlines are valid.
+
 ## Start here
 
 ```sh
@@ -34,7 +41,7 @@ optional Azure setup, access-code gating, limits, and benchmark acceptance.
 
 ## Photo workflow and code map
 
-Open **Pool photo overlay** in the browser's File controls. Match existing A/B or
+Open **Match a pool photo** below the browser's reference controls. Match existing A/B or
 measured points to a photo, or choose **Click, then enter A/B distances** to add a
 measured point and match it in one operation. Side means above/below in the
 measured plan. The photo marker can be anywhere without moving that measured
@@ -66,11 +73,13 @@ works without projection. Image processing stays local in this feature.
 
 ## Validation and next checks
 
-Local Windows validation of the photo implementation passed **153 unit tests**
-and **69 browser tests** across Chromium, Firefox and mobile WebKit. Desktop and
+Local Windows validation of the guided editor passed **160 unit tests**
+and **96 browser tests** across Chromium, Firefox and mobile WebKit. Desktop and
 390px-wide screenshots were inspected. Browser tests cover exports, project
 round trips, invalid triangles, projection, zoom alignment, cancelled pointers,
 and stale image-load cancellation alongside all existing editor/OCR checks.
+Review tests cover notes after reload, impossible remeasurement, undo, stale
+unit-dependent drafts, baseline reminders, and sequence fixes without moving points.
 
 ```sh
 cd web

@@ -31,6 +31,9 @@ App Store or TestFlight release.
    - Enter a known A–B distance, add measured points, undo, change units, and
      verify the same physical distances.
    - Export JSON, reload, reimport it, and export a printable plan.
+   - Flag a point and A–B for remeasurement, add notes, reload, and verify both.
+     Enter an impossible A/B pair and confirm saving is blocked. Correct a crossed
+     sequence using Earlier/Later, then save valid readings and undo the edit.
    - Load a pool photo, try both matching modes, zoom and move a match, then
      save/reopen a photo project and download its PNG.
    - Wait for “Recovery copy saved”, reload, and open the recovery copy. Confirm
