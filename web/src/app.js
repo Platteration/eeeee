@@ -22,6 +22,7 @@ import { LatestOperation, withTimeout } from './operations.js';
 import { downloadText } from './exporters.js';
 import { setupImportPanel } from './importPanel.js';
 import { setupOcrPanel } from './ocrPanel.js';
+import { setupPhotoPanel } from './photoPanel.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -701,3 +702,4 @@ editor.fit();
 // Handy in the console, and how the smoke tests drive the app.
 window.abplot = { store, editor };
 setupOcrPanel(setupImportPanel({ store, editor, setStatus }));
+setupPhotoPanel({ store, editor, setStatus });
