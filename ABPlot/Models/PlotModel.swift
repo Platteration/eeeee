@@ -36,6 +36,8 @@ struct PlotDocument: Codable, Equatable {
     var abDistance: Double
     var unit: LengthUnit
     var points: [PlotPoint]
+    /// Shared with the browser editor and retained when a plot is saved.
+    var name: String? = nil
 
     var abDistanceMeters: Double { abDistance * unit.toMeters }
 

@@ -1,8 +1,16 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PlotEditorView: View {
     @EnvironmentObject private var viewModel: PlotViewModel
     @FocusState private var distanceFieldFocused: Bool
+    @State private var showingClearConfirmation = false
+    @State private var canvasSize: CGSize = .zero
+    @State private var showingExport = false
+    @State private var exportFile = PlotCSVFile(text: "")
+    @State private var exportError: String?
+    @State private var showingMeasurementImport = false
+    @State private var showingPlotFiles = false
 
     private static let canvasSpace = "canvas"
 
@@ -16,7 +24,7 @@ struct PlotEditorView: View {
                         if viewModel.selectedPointID != nil {
                             viewModel.selectedPointID = nil
                         } else {
-                            viewModel.addPoint(at: clamp(location, in: geo.size))
+                            viewModel.addPoint(at: PlotMath.clampToCanvas(location, in: geo.size))
                         }
                     }
 
@@ -34,8 +42,65 @@ struct PlotEditorView: View {
                 }
             }
             .coordinateSpace(name: Self.canvasSpace)
+            .onAppear { canvasSize = geo.size }
+            .onChange(of: geo.size) { canvasSize = $0 }
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
+        .sheet(isPresented: $showingPlotFiles) { PlotFilesView(initialName: viewModel.doc.name) }
+        .sheet(isPresented: $showingMeasurementImport) {
+            MeasurementImportView(canvasSize: canvasSize,
+                                  initialDistance: viewModel.doc.abDistance, initialUnit: viewModel.doc.unit) {
+                viewModel.importMeasurements($0)
+            }
+        }
+        .fileExporter(isPresented: $showingExport, document: exportFile,
+                      contentType: .commaSeparatedText, defaultFilename: "ABPlot-coordinates") { result in
+            if case .failure(let error) = result {
+                if let error = error as? CocoaError, error.code == .userCancelled { return }
+                exportError = error.localizedDescription
+            }
+        }
+        .alert("Could not export coordinates", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "Please try again.")
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarLeading) {
+                Button {
+                    distanceFieldFocused = false
+                    viewModel.undo()
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(!viewModel.canUndo)
+                .keyboardShortcut("z", modifiers: .command)
+
+                Button {
+                    distanceFieldFocused = false
+                    viewModel.redo()
+                } label: {
+                    Label("Redo", systemImage: "arrow.uturn.forward")
+                }
+                .disabled(!viewModel.canRedo)
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { distanceFieldFocused = false }
+            }
+        }
+        .confirmationDialog("Clear all plotted points?", isPresented: $showingClearConfirmation, titleVisibility: .visible) {
+            Button("Clear all points", role: .destructive) {
+                viewModel.clearAllPoints()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A, B, and your distance will be kept. Use Undo to restore cleared points.")
+        }
     }
 
     private var baseline: some View {
@@ -61,16 +126,19 @@ struct PlotEditorView: View {
                 .minimumScaleFactor(0.5)
         }
         .frame(width: 24, height: 24)
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
         .position(point.position)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Point \(point.label)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .onTapGesture {
             viewModel.selectedPointID = isSelected ? nil : point.id
         }
-        .gesture(
-            // Nonzero minimum distance so a selection tap doesn't nudge the point.
-            DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.canvasSpace))
-                .onChanged { viewModel.movePoint(id: point.id, to: clamp($0.location, in: size)) }
-                .onEnded { _ in viewModel.endDrag() }
-        )
+        .modifier(PlotDragModifier(position: point.position, canvasSize: size,
+                                   coordinateSpace: Self.canvasSpace,
+                                   move: { viewModel.movePoint(id: point.id, to: $0) },
+                                   end: { viewModel.endDrag() }))
     }
 
     private func referenceHandle(
@@ -88,16 +156,29 @@ struct PlotEditorView: View {
                 .foregroundColor(.white)
         }
         .frame(width: 32, height: 32)
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
         .position(position)
-        .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.canvasSpace))
-                .onChanged { move(clamp($0.location, in: size)) }
-                .onEnded { _ in viewModel.endDrag() }
-        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Reference point \(label)")
+        .modifier(PlotDragModifier(position: position, canvasSize: size,
+                                   coordinateSpace: Self.canvasSpace, move: move,
+                                   end: { viewModel.endDrag() }))
     }
 
     private var bottomBar: some View {
         VStack(spacing: 10) {
+            if viewModel.saveError != nil {
+                HStack {
+                    Text("Couldn’t autosave. Your latest changes are only in memory.")
+                        .font(.caption)
+                    Spacer()
+                    Button("Retry save") { viewModel.retrySaving() }
+                        .font(.caption.bold())
+                }
+                .foregroundColor(.orange)
+                .accessibilityElement(children: .contain)
+            }
             HStack {
                 Text("A–B distance")
                     .font(.subheadline)
@@ -113,6 +194,7 @@ struct PlotEditorView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 80)
                 .focused($distanceFieldFocused)
+                .accessibilityLabel("A–B distance")
 
                 Picker("Unit", selection: Binding(
                     get: { viewModel.doc.unit },
@@ -133,18 +215,55 @@ struct PlotEditorView: View {
                     } label: {
                         Image(systemName: "trash")
                     }
+                    .accessibilityLabel("Delete selected point")
                 }
 
                 Menu {
-                    Button("Clear all points", role: .destructive) {
-                        viewModel.clearAllPoints()
+                    Button {
+                        distanceFieldFocused = false
+                        showingPlotFiles = true
+                    } label: {
+                        Label("Plot files & name", systemImage: "folder")
                     }
+                    Button {
+                        distanceFieldFocused = false
+                        showingMeasurementImport = true
+                    } label: {
+                        Label("Scan measurements", systemImage: "text.viewfinder")
+                    }
+                    Button {
+                        distanceFieldFocused = false
+                        do {
+                            exportFile = PlotCSVFile(text: try PlotCSV.string(for: viewModel.doc))
+                            showingExport = true
+                        } catch {
+                            exportError = error.localizedDescription
+                        }
+                    } label: {
+                        Label("Export coordinates (CSV)", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(!viewModel.canEnterAR)
+                    Button {
+                        distanceFieldFocused = false
+                        viewModel.fitPlot(in: canvasSize)
+                    } label: {
+                        Label("Fit plot to screen", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+                    .disabled(canvasSize.width <= 56 || canvasSize.height <= 56)
+                    Button("Clear all points", role: .destructive) {
+                        distanceFieldFocused = false
+                        showingClearConfirmation = true
+                    }
+                    .disabled(viewModel.doc.points.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel("Plot options")
             }
 
-            Text("Tap the canvas to add a point · drag points, A, or B to move them")
+            selectedPointDetails
+
+            Text(viewModel.arUnavailableReason ?? "Tap to add a point · drag points, A, or B to move them")
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
@@ -153,10 +272,18 @@ struct PlotEditorView: View {
         .background(.thinMaterial)
     }
 
-    private func clamp(_ p: CGPoint, in size: CGSize) -> CGPoint {
-        CGPoint(
-            x: min(max(p.x, 0), size.width),
-            y: min(max(p.y, 0), size.height)
-        )
+    @ViewBuilder
+    private var selectedPointDetails: some View {
+        if let point = viewModel.doc.points.first(where: { $0.id == viewModel.selectedPointID }),
+           let distances = PlotMath.referenceDistances(of: point.position, in: viewModel.doc) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Point \(point.label) · distances from references")
+                    .font(.caption.bold())
+                Text("A: \(distances.a, format: .number.precision(.fractionLength(2))) \(viewModel.doc.unit.symbol) · B: \(distances.b, format: .number.precision(.fractionLength(2))) \(viewModel.doc.unit.symbol)")
+                    .font(.caption.monospacedDigit())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
     }
 }

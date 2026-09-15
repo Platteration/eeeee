@@ -2,7 +2,7 @@ name: Web editor tests
 on:
   pull_request:
   push:
-    branches: ["claude/ab-plotting-web-app-j4en2w"]
+    branches: ["claude/ab-plotting-web-app-j4en2w", "codex/abplot-claude-handoff"]
 permissions:
   contents: read
 jobs:

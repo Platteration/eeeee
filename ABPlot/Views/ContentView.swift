@@ -9,7 +9,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             PlotEditorView()
-                .navigationTitle("AB Plot")
+                .navigationTitle(viewModel.doc.name.flatMap { $0.isEmpty ? nil : $0 } ?? "AB Plot")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {

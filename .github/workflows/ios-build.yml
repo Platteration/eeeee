@@ -1,0 +1,52 @@
+name: iOS build
+
+on:
+  push:
+    branches: ["claude/ios-ab-plotting-ar-232m3z", "codex/abplot-claude-handoff"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Check editor behavior and coordinate exports
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/PlotCSV.swift ABPlot/ViewModels/PlotViewModel.swift Tests/HistoryChecks.swift -o "$RUNNER_TEMP/history-checks"
+          "$RUNNER_TEMP/history-checks"
+      - name: Check AR measurement and rotation controls
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/AR/ARPlotSession.swift Tests/ARSessionChecks.swift -o "$RUNNER_TEMP/ar-session-checks"
+          "$RUNNER_TEMP/ar-session-checks"
+      - name: Build for iOS Simulator
+        run: >-
+          xcodebuild -project ABPlot.xcodeproj
+          -target ABPlot -configuration Debug
+          -sdk iphonesimulator
+          CODE_SIGNING_ALLOWED=NO
+          build
+      - name: Check measurement imports
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/MeasurementImport.swift ABPlot/ViewModels/PlotViewModel.swift Tests/ImportChecks.swift -o "$RUNNER_TEMP/import-checks"
+          "$RUNNER_TEMP/import-checks"
+      - name: Check Vision OCR on a printed table
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/MeasurementImport.swift ABPlot/Models/MeasurementOCR.swift Tests/OCRChecks.swift -o "$RUNNER_TEMP/ocr-checks"
+          "$RUNNER_TEMP/ocr-checks"
+      - name: Build for iOS device
+        run: >-
+          xcodebuild -project ABPlot.xcodeproj
+          -target ABPlot -configuration Debug
+          -sdk iphoneos
+          CODE_SIGNING_ALLOWED=NO
+          build
+      - name: Check portable plot files
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/PlotJSON.swift ABPlot/ViewModels/PlotViewModel.swift Tests/JSONChecks.swift -o "$RUNNER_TEMP/json-checks"
+          "$RUNNER_TEMP/json-checks"
