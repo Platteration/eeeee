@@ -12,7 +12,8 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="app-bar">
+    <section id="startup" role="status"><p id="startup-message">Starting ABPlot… If this message stays visible, check your connection and reload the page.</p><button id="startup-retry" type="button" hidden>Reload editor</button><noscript>JavaScript must be enabled to use the editor.</noscript></section>
+    <header class="app-bar" data-editor-region inert>
       <div class="brand">
         <h1>ABPlot</h1>
         <p>Plot points against an A–B baseline, then read them in real units.</p>
@@ -24,7 +25,7 @@
       </div>
     </header>
 
-    <main>
+    <main data-editor-region inert>
       <section class="canvas-wrap" aria-label="Plot canvas">
         <svg
           id="canvas"
@@ -194,6 +195,6 @@
       </section>
       <button id="entry-apply" type="button" disabled>Apply reviewed points</button>
     </dialog>
-    <script type="module" src="src/app.js"></script>
+    <script type="module" src="src/bootstrap.js"></script>
   </body>
 </html>

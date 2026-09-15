@@ -607,3 +607,6 @@ dialog table input { width: 100px; }
 .photo-recovery p { flex-basis: 100%; margin: 4px 0 0; }
 /* Keep background saves from moving photo click targets on narrow screens. */
 #photo-recovery-status { min-height: 6em; line-height: 1.5; }
+
+#startup { padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+#startup[hidden] { display: none; }
