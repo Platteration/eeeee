@@ -207,3 +207,34 @@ Autosave uses browser locks and compares the last read save before writing.
 Conflicting tabs pause autosave and offer loading the latest save or exporting
 the current version. Unsupported locking or blocked storage leaves export
 available. A corrupt previous save stays downloadable until replacement succeeds.
+
+### Pool photo overlays
+
+Open **Pool photo overlay** and choose a JPEG, PNG or WebP photo. Set the measured
+A–B distance and units. Both entry workflows are supported:
+
+- **Match an existing point:** choose A, B or a measured point and click its
+  location in the photo. Automatic advance selects the next unmatched point.
+- **Click, then enter A/B distances:** click a measured location, enter its label
+  and distances from A and B, and choose its side in the measured plan. Invalid
+  measurement triangles are rejected before a point is added.
+
+Drag to pan, use the zoom buttons or wheel, and click a selected point's new
+location to correct a match. Undo photo mark and Remove selected match adjust
+photo matches without changing the measured plot. Labels, A/B distances, opacity
+and the outline are configurable; outline segments follow measured point order.
+
+**Project unmatched points** needs at least four well-spaced matches on the same
+plane (for example, the pool rim). This uses a [planar perspective transform](https://docs.opencv.org/4.0.0/d9/dab/tutorial_homography.html),
+not a 3D reconstruction: an edge-on photo, mixed depths or collinear matches
+cannot reliably align the whole pool. Solid markers are manual matches; hollow
+markers are projected estimates. Neither matching nor projection changes the
+actual measured coordinates or distances.
+
+**Save photo project** downloads the image, measured plot, matches and appearance
+in one JSON file; **Open saved photo project** restores it. Photo state stays in
+the current tab and is not browser-autosaved, so save before closing or reloading.
+Ordinary plot JSON remains compatible with iOS and contains no photo; photo
+projects are a separate web format. Export overlaid PNG or SVG to share the
+annotated image. Photos are processed locally and normalized to PNG up to four
+megapixels; this feature does not upload them.

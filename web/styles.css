@@ -580,3 +580,24 @@ dialog table input { width: 100px; }
 #ocr-panel details { margin: 16px 0; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
 #ocr-panel summary { cursor: pointer; min-height: 44px; }
 #ocr-notes { overflow-wrap: anywhere; }
+#pool-photo { width: min(1440px, calc(100vw - 24px)); }
+.photo-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.photo-header h2 { margin-bottom: 6px; }
+.photo-header p { margin-top: 0; }
+.photo-files { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0; }
+.photo-files label { display: flex; flex-direction: column; gap: 6px; }
+#photo-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; }
+#photo-workspace[hidden] { display: none; }
+.photo-stage { min-width: 0; }
+#photo-canvas { display: block; width: 100%; height: clamp(320px, 60vh, 750px); background: #20252d; border-radius: 10px; touch-action: none; cursor: crosshair; user-select: none; }
+.photo-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.photo-controls { display: flex; flex-direction: column; gap: 12px; }
+.photo-controls label:not(.checkbox) { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.photo-controls input:not([type="checkbox"]), .photo-controls select { width: 100%; box-sizing: border-box; }
+.photo-controls fieldset { padding: 12px; border: 1px solid #d6d6dd; border-radius: 8px; }
+.photo-controls .checkbox { margin: 8px 0; }
+#photo-status { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  #photo-workspace { grid-template-columns: minmax(0, 1fr); }
+  #photo-canvas { height: 42vh; min-height: 260px; }
+}
