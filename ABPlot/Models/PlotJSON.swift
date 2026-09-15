@@ -43,6 +43,15 @@ enum PlotJSON {
         guard positions.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
             throw Invalid.document("Every point must have finite coordinates.")
         }
+        let dx = document.pointB.x - document.pointA.x
+        let dy = document.pointB.y - document.pointA.y
+        guard (dx * dx + dy * dy).isFinite,
+              positions.allSatisfy({ point in
+                  let x = point.x - document.pointA.x, y = point.y - document.pointA.y
+                  return (x * x + y * y).isFinite && (x * dx + y * dy).isFinite && (y * dx - x * dy).isFinite
+              }) else {
+            throw Invalid.document("These coordinates exceed the supported numeric range.")
+        }
         guard Set(document.points.map(\.id)).count == document.points.count else {
             throw Invalid.document("Some points have duplicate IDs. Export this plot again from the website.")
         }

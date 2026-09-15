@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ABPlot Web — plot points against an A–B baseline</title>
+    <meta
+      name="description"
+      content="Sketch a plot of points against an A–B baseline, declare the real-world A–B distance, and read every point back as real measurements."
+    />
+    <link rel="icon" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"%3E%3Crect width="32" height="32" rx="7" fill="%230a84ff"/%3E%3Cpath d="M7 22 L25 10" stroke="%23ffffff" stroke-width="2" stroke-dasharray="3 2"/%3E%3Ccircle cx="7" cy="22" r="4" fill="%2334c759"/%3E%3Ccircle cx="25" cy="10" r="4" fill="%23ff3b30"/%3E%3C/svg%3E' />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="startup" role="status"><p id="startup-message">Starting ABPlot… If this message stays visible, check your connection and reload the page.</p><button id="startup-retry" type="button" hidden>Reload editor</button><noscript>JavaScript must be enabled to use the editor.</noscript></section>
+    <header class="app-bar" data-editor-region inert>
+      <div class="brand">
+        <h1>ABPlot</h1>
+        <p>Measure your pool. Check each point. Keep a clear plan.</p>
+      </div>
+      <div class="app-bar-actions">
+        <button id="undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
+        <button id="redo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
+        <button id="fit" type="button" title="Fit the plot in view (F)">Fit</button>
+      </div>
+    </header>
+
+    <main data-editor-region inert>
+      <section class="canvas-wrap" aria-label="Plot canvas">
+        <svg
+          id="canvas"
+          role="application"
+          aria-label="Plot canvas. Click to add a point, drag points and the A and B handles to move them."
+        ></svg>
+
+        <div class="canvas-overlay canvas-overlay-bottom-left">
+          <div id="scale-bar" class="scale-bar" hidden>
+            <div class="scale-bar-rule"></div>
+            <span id="scale-bar-label"></span>
+          </div>
+        </div>
+
+        <div class="canvas-overlay canvas-overlay-bottom-right">
+          <output id="readout" class="readout" aria-live="off"></output>
+          <div class="zoom-buttons">
+            <button id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+            <button id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+
+        <p id="empty-hint" class="empty-hint">Add your A/B readings, or click the rim points in walking order.</p>
+      </section>
+
+      <aside class="panel">
+        <section class="panel-section">
+          <h2>Plot</h2>
+          <div class="field-row">
+            <label for="name">Name</label>
+            <input id="name" type="text" placeholder="Untitled plot" maxlength="80" />
+          </div>
+          <p class="note">Titles the drawing and names its exported files.</p>
+          <p id="save-status" class="status" role="status"></p>
+          <button id="retry-save" type="button" hidden>Retry save</button>
+          <button id="recovery" type="button" hidden>Download previous save for recovery</button>
+        </section>
+
+        <section class="panel-section">
+          <h2>1 · Set your A–B reference</h2>
+          <div class="field-row">
+            <label for="ab-distance">A–B distance</label>
+            <input id="ab-distance" type="number" min="0" step="0.01" inputmode="decimal" />
+            <select id="unit" aria-label="Unit">
+              <option value="meters">m</option>
+              <option value="feet">ft</option>
+            </select>
+          </div>
+          <p class="note">Place A and B where you measured from. Drag either handle on the plan, then enter the distance between them.</p><p id="scale-note" class="note"></p>
+          <div class="button-grid primary-actions"><button id="bulk-entry" type="button">2 · Enter measurements</button><button id="pool-photo-button" type="button">Match a pool photo</button></div>
+          <p class="note">Walk around the rim in one direction. Add points in that same sequence.</p>
+        </section>
+
+        <section id="point-review" class="panel-section"></section>
+        <section id="outline-review" class="panel-section"></section>
+
+        <section class="panel-section panel-grow">
+          <div class="section-head">
+            <h2>Your point sequence</h2>
+            <div class="section-actions">
+              <button id="add" type="button" class="link-button">Add point</button>
+              <button id="clear" type="button" class="link-button">Clear all</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <!-- Head and body are both built in app.js: the columns depend on
+                 whether a point is selected to measure the others against. -->
+            <table id="measurements">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+            <p id="points-empty" class="note">No points yet.</p>
+          </div>
+          <p id="extent-note" class="note"></p>
+        </section>
+
+        <section class="panel-section">
+          <h2>3 · Save & share</h2>
+          <div class="button-grid">
+            <button id="import" type="button">Import JSON…</button>
+            <button id="export-json" type="button">Export JSON</button>
+            <button id="export-csv" type="button">Export CSV</button>
+            <button id="export-svg" type="button">Export SVG</button>
+            <button id="export-png" type="button">Export PNG</button>
+            <button id="reset" type="button">New plot</button>
+          </div>
+          <input id="file" type="file" accept="application/json,.json" hidden />
+          <button id="cancel-file" type="button" hidden>Cancel file read</button>
+          <div class="field-row">
+            <label for="sheet">Plan sheet</label>
+            <select id="sheet">
+              <option value="">Fit to content</option>
+              <option value="a4-landscape">A4 landscape</option>
+              <option value="a4-portrait">A4 portrait</option>
+              <option value="a3-landscape">A3 landscape</option>
+              <option value="a3-portrait">A3 portrait</option>
+              <option value="letter-landscape">Letter landscape</option>
+              <option value="letter-portrait">Letter portrait</option>
+              <option value="tabloid-landscape">Tabloid landscape</option>
+            </select>
+            <select id="plan-scale" aria-label="Drawing scale" disabled>
+              <option value="">Auto</option>
+              <option value="20">1:20</option>
+              <option value="50">1:50</option>
+              <option value="100">1:100</option>
+              <option value="200">1:200</option>
+              <option value="500">1:500</option>
+              <option value="1000">1:1000</option>
+            </select>
+          </div>
+          <p id="sheet-note" class="note"></p>
+          <label class="checkbox">
+            <input id="annotate" type="checkbox" />
+            Label points with their measurements on SVG and PNG exports
+          </label>
+          <p class="note">
+            Open exported JSON in the updated iOS app using Plot files &amp; name → Open plot JSON.
+            Names, points, and scale travel with the file. Import an app backup here to continue editing.
+          </p>
+          <p id="status" class="status" role="status"></p>
+        </section>
+
+        <section class="panel-section">
+          <h2>How it works</h2>
+          <ul class="help">
+            <li>Click empty canvas to add a point; click a point to select it, drag to move it.</li>
+            <li>No mouse? <b>Add point</b> drops one in the middle of the view, ready to be typed into place.</li>
+            <li>
+              Or type: the <b>Along</b> and <b>Perp.</b> cells are editable, so a distance off a tape
+              measure places a point exactly.
+            </li>
+            <li>Click A, B, or a plotted point to review it. Use <b>Needs remeasurement</b> and a note for anything to check on site.</li>
+            <li>Drag the green <b>A</b> and red <b>B</b> handles to set the baseline.</li>
+            <li>The declared A–B distance scales everything else — every measurement follows from it.</li>
+            <li>Drag with the background, middle button or <kbd>Shift</kbd> to pan; scroll to zoom.</li>
+            <li>
+              <kbd>←↑→↓</kbd> nudge the selection (<kbd>Shift</kbd> for a bigger step),
+              <kbd>Delete</kbd> removes it, <kbd>Esc</kbd> deselects.
+            </li>
+          </ul>
+        </section>
+      <p class="note"><a href="privacy.html" target="_blank" rel="noopener">Data &amp; privacy</a> · Save JSON or a photo project before clearing browser data.</p>
+      </aside>
+    </main>
+
+    <dialog id="measurement-import" aria-labelledby="entry-title">
+      <div class="section-head"><h2 id="entry-title">Enter measurements</h2><button id="entry-close" type="button">Close</button></div>
+      <p>Paste a table, open a CSV, or read a photo. Nothing changes in your plot until you apply the reviewed points.</p>
+      <label>Open CSV or text <input id="entry-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
+      <div id="ocr-panel"></div>
+      <label for="entry-text">Measurement text</label>
+      <textarea id="entry-text" rows="6" spellcheck="false" placeholder="P1, 1.5, -0.8&#10;P2, 2.0, 1.2"></textarea>
+      <div class="entry-options">
+        <label>Measurements <select id="entry-mode"><option value="offsets">Along / perpendicular</option><option value="distances">Distances from A / B</option></select></label>
+        <label>Input units <select id="entry-unit"><option value="meters">Meters</option><option value="feet">Feet</option></select></label>
+        <label>Apply as <select id="entry-action"><option value="append">Add points</option><option value="replace">Replace existing points</option></select></label>
+        <label>Field separator <select id="entry-delimiter"><option value="auto">Detect separator</option><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="space">Whitespace</option></select></label>
+        <label>Decimal separator <select id="entry-decimal"><option value=".">Point (1.5)</option><option value=",">Comma (1,5)</option></select></label>
+        <label class="checkbox"><input id="entry-header" type="checkbox" /> First row is a header</label>
+        <label>Label column <input id="entry-label-column" type="number" min="1" max="30" value="1" /></label>
+        <label>Along / A column <input id="entry-first-column" type="number" min="1" max="30" value="2" /></label>
+        <label>Perpendicular / B column <input id="entry-second-column" type="number" min="1" max="30" value="3" /></label>
+      </div>
+      <p class="note">Offsets: positive perpendicular is the canvas-down side of A→B. For A/B distances, choose the side for each row in the review. A and B keep their current scale and positions.</p>
+      <button id="entry-review-button" type="button">Preview measurements</button>
+      <p id="entry-status" role="status" aria-live="polite"></p>
+      <section id="entry-review" hidden>
+        <div class="table-scroll"><table><thead><tr><th>Label</th><th id="entry-first-heading">Along</th><th id="entry-second-heading">Perpendicular</th><th>Side</th><th>Validation</th><th>Action</th></tr></thead><tbody id="entry-rows"></tbody></table></div>
+        <div id="entry-preview" aria-label="Import plot preview"></div>
+        <label id="entry-confirmation" class="checkbox" hidden><input id="entry-checked" type="checkbox" /> I checked every recognized measurement against the image.</label>
+      </section>
+      <button id="entry-apply" type="button" disabled>Apply reviewed points</button>
+    </dialog>
+    <script type="module" src="src/bootstrap.js"></script>
+  </body>
+</html>

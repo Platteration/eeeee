@@ -8,6 +8,9 @@ final class PlotViewModel: ObservableObject {
     @Published var selectedPointID: UUID?
     @Published private(set) var saveError: String?
 
+    @Published private(set) var recoveryRequired = false
+    @Published private(set) var recoveryFileName: String?
+
     private let saveURL: URL
     private var nextLabelNumber: Int
     private struct Snapshot: Equatable {
@@ -23,13 +26,21 @@ final class PlotViewModel: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let resolvedURL = saveURL ?? documents.appendingPathComponent("plot.json")
         self.saveURL = resolvedURL
-        let loaded = (try? Data(contentsOf: resolvedURL)).flatMap {
-            try? JSONDecoder().decode(PlotDocument.self, from: $0)
+        var loaded: PlotDocument?
+        var loadFailure = false
+        do {
+            loaded = try PlotJSON.decode(Data(contentsOf: resolvedURL))
+        } catch {
+            // A missing first-run file is expected; unreadable existing data is not.
+            let nsError = error as NSError
+            loadFailure = !(nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoSuchFileError)
         }
         let doc = loaded ?? .default
         self.doc = doc
         nextLabelNumber = Self.nextLabel(in: doc)
         savedSnapshot = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
+        recoveryRequired = loadFailure
+        if loadFailure { saveError = "The previous save could not be opened. It has been preserved. Back it up before saving this plot." }
     }
 
     var canUndo: Bool { !undoHistory.isEmpty }
@@ -71,6 +82,13 @@ final class PlotViewModel: ObservableObject {
         let dy = doc.pointB.y - doc.pointA.y
         guard dx * dx + dy * dy > PlotMath.minCanvasABDistance * PlotMath.minCanvasABDistance else {
             return "Move A and B farther apart."
+        }
+        for point in doc.points {
+            guard let coordinate = PlotMath.abCoordinates(of: point.position, a: doc.pointA, b: doc.pointB),
+                  Float(coordinate.s * doc.abDistanceMeters).isFinite,
+                  Float(coordinate.t * doc.abDistanceMeters).isFinite else {
+                return "Some point coordinates are too large for AR. Check the plot measurements."
+            }
         }
         return doc.points.isEmpty ? "Tap the canvas to add your first point." : nil
     }
@@ -120,6 +138,22 @@ final class PlotViewModel: ObservableObject {
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
         doc.name = trimmed.isEmpty ? nil : trimmed
         save()
+    }
+
+    /// Never overwrite an unreadable autosave until its bytes have a durable copy.
+    func preserveRecoveryAndSave() {
+        guard recoveryRequired else { retrySaving(); return }
+        do {
+            let previous = try Data(contentsOf: saveURL)
+            let backup = saveURL.deletingLastPathComponent()
+                .appendingPathComponent("plot-recovery-\(UUID().uuidString).json")
+            try previous.write(to: backup, options: .atomic)
+            recoveryFileName = backup.lastPathComponent
+            recoveryRequired = false
+            persist()
+        } catch {
+            saveError = "Could not preserve the previous save. It is still untouched. Export the current plot using Plot files & name."
+        }
     }
 
     func retrySaving() {
@@ -178,7 +212,7 @@ final class PlotViewModel: ObservableObject {
     }
 
     func setDistance(_ distance: Double) {
-        guard distance.isFinite else { return }
+        guard distance.isFinite, distance >= 0 else { return }
         doc.abDistance = distance
         save()
     }
@@ -208,8 +242,9 @@ final class PlotViewModel: ObservableObject {
     }
 
     private func persist() {
+        guard !recoveryRequired else { return }
         do {
-            let data = try JSONEncoder().encode(doc)
+            let data = try PlotJSON.encode(doc)
             try data.write(to: saveURL, options: .atomic)
             saveError = nil
         } catch {
