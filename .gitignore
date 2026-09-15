@@ -10,3 +10,5 @@ web/vendor/
 web/data/
 .env
 *.traineddata
+
+web/dist/

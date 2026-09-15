@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * A static file server for local development -- the app is plain ES modules, so
- * it only needs to be served over http:// rather than opened as a file:// URL.
- * Deliberately dependency-free; there is nothing to install before `npm start`.
+ * Dependency-free HTTP server for local use or a container behind HTTPS.
+ * Runtime files are allowlisted; optional OCR is configured separately.
  */
 
 import { createServer } from 'node:http';
@@ -14,6 +13,7 @@ import { configuredOcr } from '../server/ocr-api.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const port = Number(process.env.PORT ?? 8000);
+const host = process.env.HOST ?? '0.0.0.0';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -46,12 +46,25 @@ export function resolveRequestPath(root, urlPath) {
 
 const ocr = configuredOcr();
 const server = createServer(async (request, response) => {
-  if (await ocr(request, response)) return;
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('X-Frame-Options', 'DENY');
+  response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+  const path = (request.url ?? '/').split('?')[0];
+  if (path === '/healthz' && ['GET', 'HEAD'].includes(request.method)) {
+    response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    response.end(request.method === 'HEAD' ? undefined : JSON.stringify({ status: 'ok' })); return;
+  }
+  try { if (await ocr(request, response)) return; }
+  catch { if (!response.headersSent) response.writeHead(500); response.end('Service unavailable'); return; }
+  if (!['GET', 'HEAD'].includes(request.method)) {
+    response.writeHead(405, { Allow: 'GET, HEAD' }); response.end('Method not allowed'); return;
+  }
   const target = resolveRequestPath(root, request.url ?? '/');
   try {
     if (!target) throw new Error('outside root');
     const relative = target.slice(root.length + 1).split(sep).join('/');
-    if (!['index.html', 'styles.css'].includes(relative) && !relative.startsWith('src/') && !relative.startsWith('vendor/')) {
+    if (!['index.html', 'styles.css', 'privacy.html'].includes(relative) && !relative.startsWith('src/') && !relative.startsWith('vendor/')) {
       response.writeHead(404); response.end('Not found'); return;
     }
     const info = await stat(target);
@@ -62,6 +75,7 @@ const server = createServer(async (request, response) => {
       'content-length': size,
       'cache-control': 'no-cache',
     });
+    if (request.method === 'HEAD') { response.end(); return; }
     const stream = createReadStream(file);
     stream.on('error', () => response.destroy());
     response.on('close', () => stream.destroy());
@@ -78,7 +92,12 @@ server.headersTimeout = 10000;
 
 // Importing this module for its exports (the tests do) must not open a port.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  server.listen(port, () => console.log(`ABPlot web running at http://localhost:${port}/`));
+  server.listen(port, host, () => console.log(`ABPlot web running at http://localhost:${port}/`));
+  server.on('error', error => { console.error(`Could not start ABPlot: ${error.code || 'server error'}`); process.exitCode = 1; });
+  for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => { server.closeAllConnections(); process.exit(0); }, 10000).unref();
+  });
 }
 
 export { server };

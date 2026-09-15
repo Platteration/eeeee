@@ -13,6 +13,10 @@ Info.plist also keeps the web branch's Files sharing/open-in-place capabilities.
 Both CI workflows run for PRs and pushes to this handoff branch. Keep subsequent
 work on this branch or branch from it so changes to either platform are retained.
 
+The release-readiness pass adds iOS corrupt-save preservation, browser photo
+recovery, HTTP health/security headers, a static deployment artifact, and
+[RELEASE.md](RELEASE.md). Follow that document for launch gates.
+
 ## Start here
 
 ```sh
@@ -48,7 +52,8 @@ point. Invalid triangle measurements block point creation.
 
 Photo projects use version 1 of `abplot-photo-project` and embed the normalized
 PNG, ordinary plot document, pixel-coordinate matches keyed by point UUID/A/B,
-and display settings. They are saved explicitly and remain tab-local until saved.
+and display settings. They can be downloaded explicitly, and per-tab browser recovery copies are
+also saved in IndexedDB. Recovery failures preserve the previous durable copy.
 The iOS app currently accepts ordinary plot JSON, not photo-project files. Export
 ordinary JSON from the main web editor to move measurements to iOS. That contract
 still uses CGPoint arrays `[x,y]`, UUID strings, meters/feet, and optional name.

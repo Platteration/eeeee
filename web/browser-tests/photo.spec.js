@@ -109,3 +109,41 @@ test('removing a photo cancels a pending replacement and invalid baseline restor
   await expect(page.locator('#photo-status')).toContainText('Photo removed');
   await expect(page.locator('#photo-canvas image')).not.toHaveAttribute('href');
 });
+
+test('photo recovery survives reload and restores both image matches and measured plot', async ({ page }) => {
+  await openPhoto(page); await clickPhoto(page, 320, 260);
+  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  page.on('dialog', dialog => dialog.accept()); await page.reload();
+  await page.locator('#pool-photo-button').click(); await expect(page.locator('#photo-recover')).toBeEnabled();
+  await page.locator('#photo-recover').click(); await expect(page.locator('#photo-status')).toContainText('Opened browser-recovery.json');
+  await expect(page.locator('#photo-canvas [data-photo-id="A"]')).toBeVisible();
+  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+});
+
+test('unavailable browser photo storage preserves manual project download', async ({ page }) => {
+  await page.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { value: undefined }); });
+  await openPhoto(page); await clickPhoto(page, 320, 260);
+  await expect(page.locator('#photo-recovery-status')).toContainText('Could not save browser recovery');
+  const download = page.waitForEvent('download'); await page.locator('#photo-save-project').click();
+  expect(await (await download).failure()).toBeNull();
+});
+
+test('separate tabs keep separate photo recovery copies', async ({ page, context }) => {
+  await openPhoto(page); await clickPhoto(page, 200, 250);
+  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  const second = await context.newPage(); await openPhoto(second); await clickPhoto(second, 600, 350);
+  await expect(second.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  await second.locator('#photo-close').click(); await second.locator('#pool-photo-button').click();
+  await expect(second.locator('#photo-recovery-list option')).toHaveCount(2);
+  await second.close();
+});
+
+test('a failed photo recovery update retains the previous durable copy', async ({ page }) => {
+  await openPhoto(page); await clickPhoto(page, 220, 200);
+  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  const previous = await page.evaluate(async () => { const { photoRecovery } = await import('/src/photoRecovery.js'); return (await photoRecovery().list())[0].text; });
+  await page.evaluate(() => { const original = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...args) { if (this.name === 'projects') throw new DOMException('Quota exceeded', 'QuotaExceededError'); return original.apply(this, args); }; });
+  await clickPhoto(page, 700, 230);
+  await expect(page.locator('#photo-recovery-status')).toContainText('Could not save browser recovery');
+  expect(await page.evaluate(async () => { const { photoRecovery } = await import('/src/photoRecovery.js'); return (await photoRecovery().list())[0].text; })).toBe(previous);
+});

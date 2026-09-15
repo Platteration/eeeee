@@ -232,9 +232,21 @@ markers are projected estimates. Neither matching nor projection changes the
 actual measured coordinates or distances.
 
 **Save photo project** downloads the image, measured plot, matches and appearance
-in one JSON file; **Open saved photo project** restores it. Photo state stays in
-the current tab and is not browser-autosaved, so save before closing or reloading.
+in one JSON file; **Open saved photo project** restores it. Photo recovery copies are saved to IndexedDB on this browser. After a reload,
+choose **Saved on this browser → Open recovery copy**. Separate tabs keep separate
+copies; save failures preserve the previous copy and show a download reminder.
+Browser storage may be cleared or evicted, so download a project before closing
+when the work matters. **Delete recovery copy** removes a selected local copy.
 Ordinary plot JSON remains compatible with iOS and contains no photo; photo
 projects are a separate web format. Export overlaid PNG or SVG to share the
 annotated image. Photos are processed locally and normalized to PNG up to four
 megapixels; this feature does not upload them.
+
+## Release and deployment
+
+`npm run build` prepares an allowlisted `web/dist/` directory for static HTTPS
+hosting, including local OCR assets and license notices. Online OCR is unavailable
+on static hosting. `npm run smoke -- https://your-site.example` checks the deployed
+assets and private-path responses. Do not enable an SPA fallback: missing source
+and service paths should return 404. See [RELEASE.md](../RELEASE.md) for the
+container option, release gates, rollback, and iOS signing steps.

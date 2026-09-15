@@ -26,6 +26,11 @@ struct JSONChecks {
         do { _ = try PlotJSON.encode(negative); preconditionFailure("Negative distance accepted") }
         catch PlotJSON.Invalid.document {}
 
+        var extreme = doc
+        extreme.points[0].position.x = CGFloat.greatestFiniteMagnitude
+        do { _ = try PlotJSON.encode(extreme); preconditionFailure("Overflowing geometry accepted") }
+        catch PlotJSON.Invalid.document {}
+
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -42,6 +47,33 @@ struct JSONChecks {
         precondition(model.doc.points.last?.label == "1")
         let reopened = PlotViewModel(saveURL: url)
         precondition(reopened.doc.name == "North lawn" && reopened.doc.points.count == 2)
+        let corruptURL = directory.appendingPathComponent("unreadable.json")
+        let corrupt = Data("{broken previous plot".utf8)
+        try corrupt.write(to: corruptURL)
+        let recovery = PlotViewModel(saveURL: corruptURL)
+        precondition(recovery.recoveryRequired && recovery.saveError != nil)
+        recovery.addPoint(at: CGPoint(x: 120, y: 130))
+        recovery.retrySaving()
+        let untouched = try Data(contentsOf: corruptURL)
+        precondition(untouched == corrupt)
+        recovery.preserveRecoveryAndSave()
+        precondition(!recovery.recoveryRequired && recovery.saveError == nil)
+        let backup = directory.appendingPathComponent(recovery.recoveryFileName!)
+        let recoveredBytes = try Data(contentsOf: backup)
+        precondition(recoveredBytes == corrupt)
+        let current = try PlotJSON.decode(Data(contentsOf: corruptURL))
+        precondition(current == recovery.doc)
+
+        // If no recovery copy can be read, saving must remain blocked.
+        let unreadable = directory.appendingPathComponent("directory-not-file")
+        try FileManager.default.createDirectory(at: unreadable, withIntermediateDirectories: true)
+        let blocked = PlotViewModel(saveURL: unreadable)
+        blocked.addPoint(at: .zero)
+        blocked.preserveRecoveryAndSave()
+        precondition(blocked.recoveryRequired && blocked.saveError != nil)
+        let unchangedDistance = model.doc.abDistance
+        model.setDistance(-1)
+        precondition(model.doc.abDistance == unchangedDistance)
         print("JSON exchange, validation, names, import history, and label checks passed")
     }
 }

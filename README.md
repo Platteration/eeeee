@@ -11,6 +11,9 @@ iOS 16+, iPhone only. The browser companion lives in `web/` and includes local
 OCR and pool photo overlays. See [HANDOFF.md](HANDOFF.md) for the combined branch
 and development checklist.
 
+For deployment artifacts, verification, rollback and iOS release prerequisites,
+see [RELEASE.md](RELEASE.md).
+
 ## How it works
 
 ### 1. Plot editor
@@ -144,9 +147,9 @@ perspective limitations are in [web/README.md](web/README.md#pool-photo-overlays
    on the phone under Settings → General → VPN & Device Management.
 4. Run.
 
-The app icon set is intentionally empty (builds with a warning). To add one,
-drop a 1024×1024 PNG into `ABPlot/Assets.xcassets/AppIcon.appiconset/` and
-reference it in that folder's `Contents.json`.
+The app includes an opaque 1024px A/B icon. Its editable vector source is
+`design/ABPlotIcon.svg`; the iOS asset lives in
+`ABPlot/Assets.xcassets/AppIcon.appiconset/`.
 
 ## Project layout
 

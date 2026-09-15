@@ -18,7 +18,7 @@ jobs:
         run: xcodebuild -version
       - name: Check editor behavior and coordinate exports
         run: |
-          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/PlotCSV.swift ABPlot/ViewModels/PlotViewModel.swift Tests/HistoryChecks.swift -o "$RUNNER_TEMP/history-checks"
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/PlotCSV.swift ABPlot/Models/PlotJSON.swift ABPlot/ViewModels/PlotViewModel.swift Tests/HistoryChecks.swift -o "$RUNNER_TEMP/history-checks"
           "$RUNNER_TEMP/history-checks"
       - name: Check AR measurement and rotation controls
         run: |
@@ -33,7 +33,7 @@ jobs:
           build
       - name: Check measurement imports
         run: |
-          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/MeasurementImport.swift ABPlot/ViewModels/PlotViewModel.swift Tests/ImportChecks.swift -o "$RUNNER_TEMP/import-checks"
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/MeasurementImport.swift ABPlot/Models/PlotJSON.swift ABPlot/ViewModels/PlotViewModel.swift Tests/ImportChecks.swift -o "$RUNNER_TEMP/import-checks"
           "$RUNNER_TEMP/import-checks"
       - name: Check Vision OCR on a printed table
         run: |

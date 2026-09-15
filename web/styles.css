@@ -601,3 +601,9 @@ dialog table input { width: 100px; }
   #photo-workspace { grid-template-columns: minmax(0, 1fr); }
   #photo-canvas { height: 42vh; min-height: 260px; }
 }
+
+.photo-recovery { padding: 12px; background: #f3f7fc; border-radius: 8px; margin: 12px 0; display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.photo-recovery label { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1 1 240px; }
+.photo-recovery p { flex-basis: 100%; margin: 4px 0 0; }
+/* Keep background saves from moving photo click targets on narrow screens. */
+#photo-recovery-status { min-height: 6em; line-height: 1.5; }

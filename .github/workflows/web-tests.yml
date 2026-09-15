@@ -15,6 +15,7 @@ jobs:
         run: |
           docker run -d --name abplot -p 8000:8000 abplot-web
           for i in $(seq 1 20); do curl -fsS http://localhost:8000/api/ocr/config && break; sleep 1; done
+          curl -fsS http://localhost:8000/healthz
           test "$(curl -fsS http://localhost:8000/api/ocr/config)" = '{"enabled":false}'
           curl -fsS http://localhost:8000/vendor/ocr/tesseract.esm.min.js -o /dev/null
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/server/ocr-api.js)" = 404
@@ -51,6 +52,21 @@ jobs:
       - run: npm run test:browser
       - name: Check mobile drag setup remains stable across fresh pages
         run: npx playwright test --project=mobile-webkit --grep "an interrupted drag" --repeat-each=10
+      - name: Build static release
+        run: npm run build
+      - name: Verify release contains only public runtime files
+        run: |
+          test -f dist/index.html
+          test -f dist/vendor/ocr/lang/eng.traineddata.gz
+          test -f dist/privacy.html
+          test ! -e dist/server
+          test ! -e dist/node_modules
+          test ! -e dist/.env
+      - uses: actions/upload-artifact@v4
+        with:
+          name: abplot-static-site
+          path: web/dist/
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

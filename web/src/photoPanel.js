@@ -1,3 +1,4 @@
+import { photoRecovery } from './photoRecovery.js';
 import { loadPhoto, preparePhoto } from './ocr.js';
 import { withTimeout, LatestOperation } from './operations.js';
 import { changeUnit, fileStem, nextLabel } from './plotDocument.js';
@@ -9,6 +10,7 @@ export function setupPhotoPanel({ store, editor }) {
   const dialog = document.createElement('dialog'); dialog.id = 'pool-photo'; dialog.setAttribute('aria-labelledby', 'pool-photo-title');
   dialog.innerHTML = `<header class="photo-header"><div><h2 id="pool-photo-title">Pool photo overlay</h2><p>Match your measured points to their locations in a photo.</p></div><button id="photo-close" type="button">Close</button></header>
     <div class="photo-files"><label>Pool photo <input id="photo-file" type="file" accept="image/jpeg,image/png,image/webp" /></label><label>Open saved photo project <input id="photo-project-file" type="file" accept=".json,application/json" /></label></div>
+    <div class="photo-recovery"><label>Saved on this browser <select id="photo-recovery-list" aria-label="Saved photo recoveries"><option value="">No recovery copies found</option></select></label><button id="photo-recover" type="button" disabled>Open recovery copy</button><button id="photo-delete-recovery" type="button" disabled>Delete recovery copy</button><p id="photo-recovery-status" role="status" class="note">Photo recovery saves on this browser. Download a photo project for a portable backup.</p></div>
     <p id="photo-status" role="status">Load a pool photo to start. Photo marks do not change the measured plot.</p>
     <div id="photo-workspace" hidden><div class="photo-stage"><svg id="photo-canvas" role="img" aria-label="Pool photo with measured point overlay" tabindex="0"></svg>
       <div class="photo-toolbar"><button id="photo-fit" type="button">Fit photo</button><button id="photo-zoom-out" type="button" aria-label="Zoom photo out">−</button><button id="photo-zoom-in" type="button" aria-label="Zoom photo in">+</button><button id="photo-undo" type="button">Undo photo mark</button></div>
@@ -22,7 +24,7 @@ export function setupPhotoPanel({ store, editor }) {
       <form id="photo-measure-form" hidden><p id="photo-pending-note">Click the photo where you took a measurement.</p><label>Point label <input id="photo-label" maxlength="40" required /></label><label>Distance from A <input id="photo-from-a" inputmode="decimal" required /></label><label>Distance from B <input id="photo-from-b" inputmode="decimal" required /></label><label>Side in the measured plan <select id="photo-side"><option value="above">Above A→B</option><option value="below">Below A→B</option></select></label><p class="note">Side refers to the measured plan, not the photo's vertical direction.</p><button id="photo-add-measured" type="submit" disabled>Add measured point here</button></form>
       <fieldset><legend>Overlay appearance</legend><label>Opacity <input id="photo-opacity" type="range" min="0" max="1" step="0.05" value="0.9" /></label><label class="checkbox"><input id="photo-labels" type="checkbox" checked /> Point labels</label><label class="checkbox"><input id="photo-distances" type="checkbox" /> A/B measurements</label><label class="checkbox"><input id="photo-outline" type="checkbox" checked /> Connect points in plot order</label><label class="checkbox"><input id="photo-closed" type="checkbox" checked /> Close the pool outline</label><label class="checkbox"><input id="photo-project" type="checkbox" /> Project unmatched points</label><p class="note">Perspective projection needs four or more well-spaced matches on the same plane, such as the pool rim. It does not reconstruct depth or measure distances from the photo.</p></fieldset>
       <div class="button-grid"><button id="photo-save-project" type="button">Save photo project</button><button id="photo-export-png" type="button">Export overlaid PNG</button><button id="photo-export-svg" type="button">Export overlaid SVG</button><button id="photo-remove" type="button">Remove photo</button></div>
-      <p id="photo-save-note" class="note">Photo matching stays in this tab. Save a photo project to reopen the image, matches and measured plot together.</p>
+      <p id="photo-save-note" class="note">Download a photo project to keep a portable copy of the image, matches and measured plot together.</p>
     </section></div>`;
   document.body.append(dialog);
   const $ = id => document.getElementById(`photo-${id}`), svg = $('canvas');
@@ -33,7 +35,42 @@ export function setupPhotoPanel({ store, editor }) {
   let view = null, drag = null;
   const reads = new LatestOperation();
   const note = text => { $('status').textContent = text; };
-  const changed = () => { dirty = true; $('save-note').textContent = 'Photo project has changes. Save photo project to keep the image, matches and measured plot together.'; };
+  const changed = () => { queueRecovery(); dirty = true; $('save-note').textContent = 'Photo project has changes. Save photo project to keep the image, matches and measured plot together.'; };
+  const recovery = photoRecovery(), recoveryId = crypto.randomUUID();
+  let recoveryTimer, recoveryWork = Promise.resolve(), recoveryRecords = [], recoveryGeneration = 0;
+  async function listRecoveries() {
+    try {
+      recoveryRecords = await recovery.list();
+      $('recovery-list').replaceChildren(...(recoveryRecords.length ? recoveryRecords.map(record => new Option(`${record.name || 'Untitled pool'} · ${new Date(record.updated).toLocaleString()}`, record.id)) : [new Option('No recovery copies found', '')]));
+      $('recover').disabled = $('delete-recovery').disabled = !recoveryRecords.length;
+    } catch { $('recovery-status').textContent = 'Browser recovery is unavailable. Save a photo project file to keep your work.'; }
+  }
+  function queueRecovery() {
+    clearTimeout(recoveryTimer);
+    recoveryTimer = setTimeout(saveRecovery, 400);
+  }
+  function saveRecovery() {
+    clearTimeout(recoveryTimer); if (!photo) return;
+    const generation = ++recoveryGeneration;
+    const record = { id: recoveryId, name: store.document.name || photo.name, updated: Date.now(), text: serializePhotoProject(store.document, photo) };
+    $('recovery-status').textContent = 'Saving browser recovery copy…';
+    recoveryWork = recoveryWork.then(() => recovery.save(record)).then(() => {
+      if (generation === recoveryGeneration && photo) $('recovery-status').textContent = 'Recovery copy saved on this browser. Download a photo project for a portable backup.';
+    }).catch(() => { if (generation === recoveryGeneration && photo) $('recovery-status').textContent = 'Could not save browser recovery. Your last saved copy is kept. Download a photo project now.'; });
+  }
+  $('recover').addEventListener('click', () => {
+    const record = recoveryRecords.find(item => item.id === $('recovery-list').value); if (!record) return;
+    const files = new DataTransfer(); files.items.add(new File([record.text], 'browser-recovery.json', { type: 'application/json' }));
+    $('project-file').files = files.files; $('project-file').dispatchEvent(new Event('change'));
+  });
+  $('delete-recovery').addEventListener('click', async () => {
+    const id = $('recovery-list').value;
+    if (!id || !confirm('Delete this browser recovery copy? Download a photo project first if you need to keep it.')) return;
+    if (id === recoveryId) { clearTimeout(recoveryTimer); recoveryGeneration++; }
+    try { await recoveryWork; await recovery.remove(id); await listRecoveries(); $('recovery-status').textContent = 'Recovery copy deleted. Further edits create a new recovery copy.'; }
+    catch { $('recovery-status').textContent = 'Could not delete the recovery copy. Try again.'; }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && photo) saveRecovery(); });
   const remember = () => { history.push(structuredClone(photo.pins)); if (history.length > 100) history.shift(); };
   const selectionOptions = () => {
     const ids = plotLandmarks(store.document);
@@ -118,7 +155,7 @@ export function setupPhotoPanel({ store, editor }) {
   svg.addEventListener('wheel', event => { if (photo) { event.preventDefault(); zoom(event.deltaY < 0 ? 1.15 : 1 / 1.15); } }, { passive: false });
   new ResizeObserver(() => { if (dialog.open && photo) render(); }).observe(svg);
   dialog.addEventListener('keydown', event => event.stopPropagation());
-  document.getElementById('pool-photo-button').addEventListener('click', () => { dialog.showModal(); render(); });
+  document.getElementById('pool-photo-button').addEventListener('click', () => { dialog.showModal(); render(); void listRecoveries(); });
   $('close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => { reads.cancel(); loading = false; cancelPointer(); });
   $('fit').addEventListener('click', fit); $('zoom-in').addEventListener('click', () => zoom(1.4)); $('zoom-out').addEventListener('click', () => zoom(1 / 1.4));
@@ -174,7 +211,7 @@ export function setupPhotoPanel({ store, editor }) {
       if (store.revision !== revision) throw Error('The plot changed while loading. Open the project again when ready.');
       if (!confirm('Open this photo project and replace the current plot and photo matches? Save your current photo project first if you need it.')) { note('Project opening cancelled.'); return; }
       store.replace(project.document); photo = project.photo; history = []; pending = null; dirty = false; selected = 'A'; $('add-measured').disabled = true; editor.fit(); fit();
-      $('save-note').textContent = 'Opened photo project. Save a new copy after changing matches or measurements.'; note(`Opened ${file.name}.`);
+      $('save-note').textContent = 'Opened photo project. Save a new copy after changing matches or measurements.'; note(`Opened ${file.name}.`); queueRecovery();
     } catch (error) { if (current()) note(error.message); }
     finally { bitmap?.close(); if (current()) loading = false; }
   });
@@ -194,7 +231,7 @@ export function setupPhotoPanel({ store, editor }) {
       downloadBlob(`${fileStem(store.document)}-photo.png`, blob); note('Overlaid PNG download requested.');
     } finally { URL.revokeObjectURL(url); }
   }));
-  $('remove').addEventListener('click', () => { if (!confirm('Remove this photo and its matches? The measured plot will be kept.')) return; reads.cancel(); loading = false; cancelPointer(); photo = null; renderedPhoto = null; imageLayer.removeAttribute('href'); overlayLayer.replaceChildren(); history = []; pending = null; dirty = false; render(); note('Photo removed. The measured plot is unchanged.'); });
+  $('remove').addEventListener('click', () => { if (!confirm('Remove this photo and its matches? The measured plot will be kept.')) return; reads.cancel(); loading = false; cancelPointer(); clearTimeout(recoveryTimer); recoveryGeneration++; photo = null; renderedPhoto = null; imageLayer.removeAttribute('href'); overlayLayer.replaceChildren(); history = []; pending = null; dirty = false; render(); note('Photo removed. The measured plot is unchanged. Saved browser recovery copies remain available above.'); });
   let revision = store.revision;
   store.subscribe(() => { if (photo && store.revision !== revision) changed(); revision = store.revision; if (dialog.open) render(); });
   window.addEventListener('beforeunload', event => { if (photo && dirty) { event.preventDefault(); event.returnValue = ''; } });
