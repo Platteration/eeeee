@@ -5,6 +5,13 @@ The website is the quickest launch path. The combined source stays on
 A prepared artifact is not a deployed site, and unsigned iOS builds are not an
 App Store or TestFlight release.
 
+This focused release makes the web client usable on desktop and phones through
+Plan/Photo workspaces, Measure/Points/Checks navigation, explicit editing tools,
+number-plus-description point naming, protected input drafts and complete-project
+save/open/undo. Exports now include a printable remeasurement field sheet and
+retain descriptions, reminders and notes. The updated iOS model preserves the
+optional metadata; its new native UI is outside this web release.
+
 ## Website launch
 
 1. Use a commit whose web and iOS GitHub Actions checks are green. Download its
@@ -28,16 +35,34 @@ App Store or TestFlight release.
    projects and browser APIs. Retain the previous artifact for rollback.
 4. Run `npm run smoke -- https://YOUR-HOST` from `web/` against the public URL.
 5. On the deployed origin, manually run this short acceptance pass:
-   - Enter a known A–B distance, add measured points, undo, change units, and
-     verify the same physical distances.
-   - Export JSON, reload, reimport it, and export a printable plan.
+   - Start a fresh project, verify no measured baseline is assumed, enter a known
+     A–B distance, preview and apply it. Add points with Add & next, including a
+     number/code and description; insert one after an existing point.
+   - Verify Select does not add or move points. Move and Sketch points should
+     require explicit tools. Check that Done/Escape exits editing, touch cancel
+     does not commit a drag, and narrow layouts preserve access to the plan.
+   - Find points by description, filter reminders/warnings, change a valid label,
+     and confirm IDs, readings, photo matches and sequence remain unchanged. New
+     duplicates and reserved A/B labels should show a corrective message.
+   - Start remeasurement fields, inspect another point and return. Change units
+     or the reference and verify the old draft cannot be silently applied. Type
+     a note/description and confirm one Undo restores the pre-typing value.
    - Flag a point and A–B for remeasurement, add notes, reload, and verify both.
      Enter an impossible A/B pair and confirm saving is blocked. Correct a crossed
      sequence using Earlier/Later, then save valid readings and undo the edit.
-   - Load a pool photo, try both matching modes, zoom and move a match, then
-     save/reopen a photo project and download its PNG.
-   - Wait for “Recovery copy saved”, reload, and open the recovery copy. Confirm
-     labels, positions, units and image match what was saved.
+   - Load a pool photo and try both workflows. After automatic advance, tapping
+     an existing marker must select it without placing the next point. Move a
+     match, undo, and confirm measured positions/distances did not change.
+   - Use header Save project, reopen its download, and verify image, matches,
+     measurements, descriptions and reminders. Open an ordinary plot or start a
+     new project: the old photo must detach; Undo must restore the complete pair.
+   - Wait for complete plot/photo browser recovery, reload, and open the saved
+     copy from Photo. Confirm the earlier photo project remains recoverable after
+     switching projects, including a switch immediately after an edit.
+   - Export plot for iPhone and CSV, then SVG/PNG and Print field sheet. Check the
+     ordered boundary, point labels, description key, notes and remeasurement
+     markers. Print to paper/PDF and verify content fits without changing editor
+     selection or history; scaled plans need actual-size printing.
    - Recognize a clear printed measurement table locally, correct a number in
      review, and import it. Check that local OCR contacts only this site.
    - Repeat the essentials on a real phone. Downloaded files and camera/photo
@@ -102,8 +127,16 @@ accuracy claims until their separate live/sample checks pass.
 
 Rollback the website by redeploying the previous complete static artifact or
 container image, then run the smoke probe again. Avoid clearing browser data:
-users may have unsaved plots or recovery copies. Ordinary plot JSON is unchanged;
-photo projects stay version 1, so existing saved projects remain portable.
+users may have unsaved plots or recovery copies. Ordinary plot JSON keeps its
+geometry contract with optional metadata; photo projects stay version 1, so
+existing saved projects remain portable. Older iOS builds may drop optional
+descriptions and review metadata when saving; validate round trips with the
+updated app before relying on it to preserve those fields.
+
+Later roadmap work includes a project library, an explicit offline-install/cache
+strategy, improved OCR crop/source review, and native iOS UI for the new review
+metadata and photo projects. These features are not release prerequisites or
+claims of the current package.
 
 For support, record the release commit, browser/device, visible error, and steps
 to reproduce. Ask for a redacted sample only when needed; do not collect personal

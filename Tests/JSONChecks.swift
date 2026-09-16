@@ -12,6 +12,7 @@ struct JSONChecks {
         var review = doc
         review.points[0].note = "Remeasure near steps"
         review.points[0].needsRemeasure = true
+        review.points[0].description = "Shallow-end corner · échelle"
         review.baselineNote = "Check tape sag"
         review.baselineNeedsRemeasure = true
         review.outlineDirection = "clockwise"
@@ -19,6 +20,7 @@ struct JSONChecks {
         precondition(reviewedRoundTrip == review)
         let roundTrip = try PlotJSON.decode(PlotJSON.encode(doc))
         precondition(roundTrip == doc)
+        precondition(roundTrip.points[0].description == nil)
         let legacy = try PlotJSON.decode(PlotJSON.encode(.default))
         precondition(legacy.name == nil)
         for bad in [Data("not json".utf8), Data(repeating: 0, count: PlotJSON.maximumBytes + 1)] {

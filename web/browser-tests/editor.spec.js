@@ -1,3 +1,4 @@
+import { seedBaseline, addPoint, showPoints } from './helpers.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
@@ -8,10 +9,10 @@ const fixture = {
 };
 const points = (page) => page.locator('#measurements tbody tr');
 
-test.beforeEach(async ({ page }) => { await page.goto('/'); });
+test.beforeEach(async ({ page }) => { await seedBaseline(page); await page.goto('/'); });
 
 test('keyboard deletion activates the button and undo restores the point', async ({ page }) => {
-  await page.getByRole('button', { name: 'Add point', exact: true }).click();
+  await addPoint(page);
   await page.getByRole('button', { name: 'Delete point 1', exact: true }).press('Space');
   await expect(points(page)).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -19,7 +20,7 @@ test('keyboard deletion activates the button and undo restores the point', async
 });
 
 test('typed coordinates commit and tab advances to the next cell', async ({ page }) => {
-  await page.getByRole('button', { name: 'Add point', exact: true }).click();
+  await addPoint(page);
   await page.getByLabel('Along for point 1', { exact: true }).fill('3,5');
   await page.getByLabel('Along for point 1', { exact: true }).press('Tab');
   await expect(page.getByLabel('Perp. for point 1', { exact: true })).toBeFocused();
@@ -27,12 +28,12 @@ test('typed coordinates commit and tab advances to the next cell', async ({ page
   await page.getByLabel('Perp. for point 1', { exact: true }).press('Enter');
   await expect(page.getByLabel('Along for point 1', { exact: true })).toHaveValue('+3.50');
   await expect(page.getByLabel('Perp. for point 1', { exact: true })).toHaveValue('-1.25');
-  await page.reload();
+  await page.reload(); await showPoints(page);
   await expect(page.getByLabel('Perp. for point 1', { exact: true })).toHaveValue('-1.25');
 });
 
 test('text-field undo does not undo unrelated plot edits', async ({ page }) => {
-  await page.getByRole('button', { name: 'Add point', exact: true }).click();
+  await addPoint(page);
   await page.getByLabel('Name', { exact: true }).press('Control+z');
   await expect(points(page)).toHaveCount(1);
 });
@@ -47,6 +48,7 @@ test('canceled touch and shift click never add a point', async ({ page }) => {
 });
 
 test('an interrupted drag saves its last position as one undoable edit', async ({ page }) => {
+  await page.locator('#tool-move').click();
   const handle = page.locator('[data-handle="A"]');
   const svg = page.locator('#canvas');
   // Marker nodes are replaced during rendering. Read the current target and
@@ -86,9 +88,10 @@ test('JSON validation, named import, units and all four downloads work', async (
   await page.getByLabel('Unit', { exact: true }).selectOption('feet');
   expect(Number(await page.getByLabel('A–B distance', { exact: true }).inputValue())).toBeCloseTo(2 / 0.3048);
   await page.getByLabel('Unit', { exact: true }).selectOption('meters');
+  await page.locator('#export-options-button').click();
   for (const format of ['JSON', 'CSV', 'SVG', 'PNG']) {
     const downloading = page.waitForEvent('download');
-    await page.getByRole('button', { name: `Export ${format}`, exact: true }).click();
+    await page.getByRole('button', { name: format === 'JSON' ? 'Export plot for iPhone' : `Export ${format}`, exact: true }).click();
     const download = await downloading;
     expect(await download.failure()).toBeNull();
     const bytes = await readFile(await download.path());
@@ -113,7 +116,7 @@ test('save failure is visible and retry persists the current plot', async ({ pag
     };
   });
   await page.reload();
-  await page.getByRole('button', { name: 'Add point', exact: true }).click();
+  await addPoint(page);
   await expect(page.locator('#save-status')).toContainText('Could not autosave');
   await page.evaluate(() => { window.failAutosave = false; });
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
@@ -123,7 +126,7 @@ test('save failure is visible and retry persists the current plot', async ({ pag
 
 test('the narrow layout fits the page and canvas targets remain touch-sized', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Add point', exact: true }).click();
+  await addPoint(page);
   await page.getByRole('button', { name: 'Fit', exact: true }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow).toBe(false);

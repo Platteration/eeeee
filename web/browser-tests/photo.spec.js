@@ -1,8 +1,9 @@
+import { seedBaseline } from './helpers.js';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 async function openPhoto(page) {
-  await page.goto('/');
+  await seedBaseline(page); await page.goto('/');
   const image = await page.evaluate(() => {
     const c = document.createElement('canvas'); c.width = 1000; c.height = 600;
     const ctx = c.getContext('2d'); ctx.fillStyle = '#6b8263'; ctx.fillRect(0, 0, 1000, 600);
@@ -12,9 +13,10 @@ async function openPhoto(page) {
   });
   await page.locator('#pool-photo-button').click();
   await page.locator('#photo-file').setInputFiles({ name: 'pool.png', mimeType: 'image/png', buffer: Buffer.from(image, 'base64') });
-  await expect(page.locator('#photo-workspace')).toBeVisible();
+  await expect(page.locator('#photo-workspace')).toBeVisible(); await page.locator('#photo-tool').selectOption('match'); await page.locator('#pool-photo details').evaluateAll(items=>items.forEach(el=>el.open=true));
 }
 async function clickPhoto(page, x, y) {
+  await page.locator('#photo-canvas').scrollIntoViewIfNeeded();
   const canvas = page.locator('#photo-canvas'); await canvas.scrollIntoViewIfNeeded();
   const point = await canvas.evaluate((svg, p) => { const matrix = svg.getScreenCTM(), q = new DOMPoint(p.x, p.y).matrixTransform(matrix); return { x: q.x, y: q.y, tolerance: 2 / matrix.a }; }, { x, y });
   await page.mouse.click(point.x, point.y);
@@ -36,7 +38,7 @@ test('existing points match the photo without changing measurements, and marks u
 test('click-first entry validates A/B distances and overlays the resulting measured point', async ({ page }) => {
   await openPhoto(page); await page.locator('#photo-mode').selectOption('new'); const tolerance = await clickPhoto(page, 300, 250);
   await page.locator('#photo-label').fill('Corner'); await page.locator('#photo-from-a').fill('0.1'); await page.locator('#photo-from-b').fill('0.1');
-  await page.locator('#photo-add-measured').click(); await expect(page.locator('#photo-status')).toContainText('triangle');
+  await expect(page.locator('#photo-add-measured')).toBeDisabled(); await expect(page.locator('#photo-measure-status')).toContainText('triangle');
   expect(await page.evaluate(() => window.abplot.store.document.points.length)).toBe(0);
   await page.locator('#photo-from-a').fill(String(Math.sqrt(2))); await page.locator('#photo-from-b').fill(String(Math.sqrt(2)));
   await page.locator('#photo-add-measured').click();
@@ -95,7 +97,7 @@ test('four photo matches project the remaining point without changing the plot',
 test('removing a photo cancels a pending replacement and invalid baseline restores its value', async ({ page }) => {
   await openPhoto(page);
   await page.locator('#photo-baseline').fill('-1'); await page.locator('#photo-unit').focus();
-  await expect(page.locator('#photo-baseline')).toHaveValue('2');
+  await expect(page.locator('#photo-baseline-apply')).toBeDisabled(); expect(await page.evaluate(()=>window.abplot.store.document.abDistance)).toBe(2);
   const image = await page.locator('#photo-canvas image').getAttribute('href');
   await page.evaluate(() => {
     const original = window.createImageBitmap;
@@ -112,27 +114,28 @@ test('removing a photo cancels a pending replacement and invalid baseline restor
 
 test('photo recovery survives reload and restores both image matches and measured plot', async ({ page }) => {
   await openPhoto(page); await clickPhoto(page, 320, 260);
-  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  await expect(page.locator('#photo-canvas [data-photo-id="A"]')).toBeVisible();
+  await expect(page.locator('#photo-recovery-status')).toContainText('recovery saved');
   page.on('dialog', dialog => dialog.accept()); await page.reload();
-  await page.locator('#pool-photo-button').click(); await expect(page.locator('#photo-recover')).toBeEnabled();
+  await page.locator('#pool-photo-button').click(); await page.locator('.photo-recovery summary').click(); await expect(page.locator('#photo-recover')).toBeEnabled();
   await page.locator('#photo-recover').click(); await expect(page.locator('#photo-status')).toContainText('Opened browser-recovery.json');
   await expect(page.locator('#photo-canvas [data-photo-id="A"]')).toBeVisible();
-  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  await expect(page.locator('#photo-recovery-status')).toContainText('recovery saved');
 });
 
 test('unavailable browser photo storage preserves manual project download', async ({ page }) => {
   await page.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { value: undefined }); });
   await openPhoto(page); await clickPhoto(page, 320, 260);
-  await expect(page.locator('#photo-recovery-status')).toContainText('Could not save browser recovery');
+  await expect(page.locator('#photo-recovery-status')).toContainText('Could not save photo recovery');
   const download = page.waitForEvent('download'); await page.locator('#photo-save-project').click();
   expect(await (await download).failure()).toBeNull();
 });
 
 test('separate tabs keep separate photo recovery copies', async ({ page, context }) => {
   await openPhoto(page); await clickPhoto(page, 200, 250);
-  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  await expect(page.locator('#photo-recovery-status')).toContainText('recovery saved');
   const second = await context.newPage(); await openPhoto(second); await clickPhoto(second, 600, 350);
-  await expect(second.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  await expect(second.locator('#photo-recovery-status')).toContainText('recovery saved');
   await second.locator('#photo-close').click(); await second.locator('#pool-photo-button').click();
   await expect(second.locator('#photo-recovery-list option')).toHaveCount(2);
   await second.close();
@@ -140,10 +143,10 @@ test('separate tabs keep separate photo recovery copies', async ({ page, context
 
 test('a failed photo recovery update retains the previous durable copy', async ({ page }) => {
   await openPhoto(page); await clickPhoto(page, 220, 200);
-  await expect(page.locator('#photo-recovery-status')).toContainText('Recovery copy saved');
+  await expect(page.locator('#photo-recovery-status')).toContainText('recovery saved');
   const previous = await page.evaluate(async () => { const { photoRecovery } = await import('/src/photoRecovery.js'); return (await photoRecovery().list())[0].text; });
   await page.evaluate(() => { const original = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...args) { if (this.name === 'projects') throw new DOMException('Quota exceeded', 'QuotaExceededError'); return original.apply(this, args); }; });
   await clickPhoto(page, 700, 230);
-  await expect(page.locator('#photo-recovery-status')).toContainText('Could not save browser recovery');
+  await expect(page.locator('#photo-recovery-status')).toContainText('Could not save photo recovery');
   expect(await page.evaluate(async () => { const { photoRecovery } = await import('/src/photoRecovery.js'); return (await photoRecovery().list())[0].text; })).toBe(previous);
 });

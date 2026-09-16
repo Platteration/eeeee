@@ -1,4 +1,5 @@
 import { reviewFields } from './plotReview.js';
+import { normalizePointDescription } from './pointNames.js';
 /**
  * The plot document: the same shape the iOS app persists, so a file exported
  * here opens there and vice versa.
@@ -147,6 +148,7 @@ export function parseDocument(input) {
     return {
       id,
       ...reviewFields(point),
+      ...(normalizePointDescription(point.description) ? { description: normalizePointDescription(point.description) } : {}),
       position: coercePoint(point.position, `points[${index}].position`),
       label: point.label === undefined || point.label === null ? String(index + 1) : String(point.label),
     };
@@ -177,6 +179,7 @@ export function toWireFormat(doc) {
     points: doc.points.map((point) => ({
       id: point.id,
       ...reviewFields(point),
+      ...(normalizePointDescription(point.description) ? { description: normalizePointDescription(point.description) } : {}),
       position: [point.position.x, point.position.y],
       label: point.label,
     })),

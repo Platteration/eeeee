@@ -1,28 +1,18 @@
 # ABPlot handoff to Claude
 
 Continue on **codex/abplot-claude-handoff** in **Platteration/eeeee**. This branch
-combines both existing Claude platform branches and the subsequent Codex changes:
+combines both Claude platform branches and the subsequent Codex work:
 
-- Web: `claude/ab-plotting-web-app-j4en2w`, including data recovery, reviewed bulk
-  entry, local/optional cloud OCR, and PR #12 pool photo overlays.
-- iOS: `claude/ios-ab-plotting-ar-232m3z` at `4477059`, including the AR reticle,
-  rotation, measurement imports/OCR, history, and portable plot-file improvements.
+- Web: `claude/ab-plotting-web-app-j4en2w`, including reviewed table entry, OCR,
+  recovery and pool photo overlays.
+- iOS: `claude/ios-ab-plotting-ar-232m3z` at `4477059`, including AR reticle,
+  rotation, measurement imports/OCR, history and portable plot files.
 
-The merge retains both histories. The Swift app is preserved from the iOS branch;
-Info.plist also keeps the web branch's Files sharing/open-in-place capabilities.
-Both CI workflows run for PRs and pushes to this handoff branch. Keep subsequent
-work on this branch or branch from it so changes to either platform are retained.
-
-The release-readiness pass adds iOS corrupt-save preservation, browser photo
-recovery, HTTP health/security headers, a static deployment artifact, and
-[RELEASE.md](RELEASE.md). Follow that document for launch gates.
-
-The guided web review pass adds point/reference remeasurement reminders and
-notes, direct A/B distance editing, conservative outline-order warnings, and
-manual sequence corrections. `web/src/reviewPanel.js` owns the UI;
-`web/src/plotReview.js` owns pure outline checks and portable metadata. The Swift
-model preserves that metadata without adding an iOS review UI. No automatic
-reordering is performed, and concave pool outlines are valid.
+Both histories are retained. Info.plist keeps Files sharing/open-in-place support.
+Web and iOS CI run for PRs and pushes to this handoff branch. Continue from this
+branch so work on either platform remains included. A static package is prepared
+for deployment; packaging and green unsigned iOS builds do not publish a website
+or distribute an app. Follow [RELEASE.md](RELEASE.md) for launch gates.
 
 ## Start here
 
@@ -34,76 +24,133 @@ npm ci
 npm start
 ```
 
-Use Node 22 or 24 and open http://localhost:8000. The iOS project needs Xcode 16+
-on macOS; signing and a physical iPhone are needed for actual AR use. Root README
-covers the app, web/README.md covers the browser, and web/OCR_PILOT.md covers
-optional Azure setup, access-code gating, limits, and benchmark acceptance.
+Use Node 22 or 24 and open http://localhost:8000. The iOS project requires Xcode
+16+ on macOS; real AR needs a signed build and physical iPhone. Root README covers
+the app, [web/README.md](web/README.md) covers the current browser journeys, and
+[web/OCR_PILOT.md](web/OCR_PILOT.md) covers optional Azure setup and limits.
 
-## Photo workflow and code map
+## What the focused web polish release changes
 
-Open **Match a pool photo** below the browser's reference controls. Match existing A/B or
-measured points to a photo, or choose **Click, then enter A/B distances** to add a
-measured point and match it in one operation. Side means above/below in the
-measured plan. The photo marker can be anywhere without moving that measured
-point. Invalid triangle measurements block point creation.
+The header owns project name, Open project, Save project and Export. **Plan** and
+**Photo** are inline workspaces. The plan side panel separates **Measure**,
+**Points**, and **Checks** and collapses on smaller screens. A fresh browser
+project starts unscaled: enter the actual A–B distance and explicitly apply it.
+Changing the reference previews its global effect before committing.
 
-- `web/src/photoPanel.js`: dialog, gestures, both entry modes, image loading,
-  project save/open, PNG/SVG download, cancellation and save reminders.
-- `web/src/photoOverlay.js`: project format validation, planar perspective fit,
-  marker/outline geometry and escaped self-contained SVG.
-- `web/src/measurementImport.js`, `plotDocument.js`, `store.js`: existing shared
-  measurement validation, units/wire format, undo and safe persistence.
-- `web/browser-tests/photo.spec.js`, `web/test/photoOverlay.test.js`: photo
-  workflow and numerical regression coverage.
-- `ABPlot/Models/PlotJSON.swift` and `Tests/JSONChecks.swift`: iOS file contract.
+**Measure** supports one-at-a-time A/B entry with Add & next, a missed point's
+insertion position, and reviewed table/OCR entry. The table defaults to A/B
+distances; column mapping and exact offset editing remain available as advanced
+controls. **Select** is the default plan/photo tool. Moving and adding/matching
+require their explicit tools, so inspection taps cannot accidentally edit data.
 
-Photo projects use version 1 of `abplot-photo-project` and embed the normalized
-PNG, ordinary plot document, pixel-coordinate matches keyed by point UUID/A/B,
-and display settings. They can be downloaded explicitly, and per-tab browser recovery copies are
-also saved in IndexedDB. Recovery failures preserve the previous durable copy.
-The iOS app currently accepts ordinary plot JSON, not photo-project files. Export
-ordinary JSON from the main web editor to move measurements to iOS. That contract
-still uses CGPoint arrays `[x,y]`, UUID strings, meters/feet, and optional name.
+**Points** presents number/code plus optional description, search, filters,
+previous/next navigation, A/B remeasurement, reminders and notes. Labels can be
+repaired without changing UUIDs, geometry, sequence or photo matches. Imported
+legacy labels are preserved and warned on; new duplicate/reserved labels are
+rejected. Per-point remeasurement drafts survive navigation and cannot apply
+under a stale point/reference/unit context. Descriptions and notes autosave on
+input, with consecutive typing grouped into one Undo step.
 
-Projection uses four or more well-spaced matches on one plane (e.g. the pool rim).
-It is an alignment aid, not 3D reconstruction or a way to derive distances from a
-photo. Edge-on views, mixed depths and collinear matches are unsuitable. Hollow
-markers are projected estimates; solid markers are user matches. Manual matching
-works without projection. Image processing stays local in this feature.
+**Checks** keeps conservative crossing/overlap/flatness/direction advice. Earlier,
+Later and Reverse sequence change order without changing geometry. Concave pools
+are valid; warnings identify candidates rather than claiming one reading is
+provably wrong. Manual reminders and outline warnings remain distinct.
 
-## Validation and next checks
+**Photo** supports matching existing points or clicking first and then entering
+A/B readings. Clicking an existing marker selects it even after auto-advance;
+Move match changes image coordinates only. Select does not place marks. Photo
+measurements guard against changed reference units, and creating a point plus
+its match is one Undo action. Projection remains an optional planar alignment aid
+using at least four well-spaced matches, never a source of physical measurements.
 
-Local Windows validation of the guided editor passed **160 unit tests**
-and **96 browser tests** across Chromium, Firefox and mobile WebKit. Desktop and
-390px-wide screenshots were inspected. Browser tests cover exports, project
-round trips, invalid triangles, projection, zoom alignment, cancelled pointers,
-and stale image-load cancellation alongside all existing editor/OCR checks.
-Review tests cover notes after reload, impossible remeasurement, undo, stale
-unit-dependent drafts, baseline reminders, and sequence fixes without moving points.
+**Export** includes plot-only iPhone JSON, CSV with descriptions/reminders/notes,
+SVG/PNG plans with the ordered boundary and a description key, and a printable
+field sheet of A/B readings, descriptions, checks and notes. The print document is
+separate from the editor and can use the browser's Save as PDF destination.
+
+## Whole-project state and compatibility
+
+Keep the two existing portable formats:
+
+- Ordinary plot JSON: CGPoint arrays `[x,y]`, UUID identifiers, meters/feet units,
+  point labels and optional metadata. **Export plot for iPhone** selects this
+  format even when the web project has a photo.
+- Photo project: `format: "abplot-photo-project"`, `version: 1`, ordinary
+  `document`, and a normalized embedded PNG with UUID/A/B-keyed pixel matches and
+  display settings. No version bump or saved-project migration is required.
+
+**Save project** uses photo-project JSON whenever an image is attached and plain
+plot JSON otherwise. **Open project** auto-detects either. New project and ordinary
+plot-file opening detach the previous photo; Undo restores the complete previous
+pair. Its prior durable photo recovery remains available. Separate tabs keep
+separate photo recovery records, and failed updates preserve the earlier copy.
+The header reports photo recovery failures as well as ordinary plot-save status.
+Browser recovery is distinct from an explicitly downloaded portable project.
+
+Relevant ownership boundaries:
+
+- `web/src/store.js` owns document and photo-sidecar Undo/Redo. `apply(mutate,
+  {historyGroup})` groups consecutive input from a focus token while saving each
+  change. `applyProject` mutates a `{document, photo}` pair atomically. Existing
+  document-only edits preserve the photo. `loadLatest()` detaches it.
+- `web/src/projectState.js` shares frozen image assets across history snapshots;
+  only pins/settings are copied. Never place image data into ordinary plot
+  autosave or structured-clone full image bytes for each text edit.
+- `web/src/photoPanel.js` owns photo interactions, project open/save, recovery and
+  loading cancellation. Its public API includes `open`, `close`, `cancelOpen`,
+  `openProject(file)`, `replaceDocument(doc)`, `saveProject()`, `hasDraft`, and
+  `discardDrafts()`. Callbacks coordinate workspace visibility, recovery status
+  and the shared before-replace draft guard.
+- `web/src/pointNames.js`, `reviewPanel.js`, `quickEntry.js` own point presentation,
+  focused entry and draft handling. `photoOverlay.js` and `plotReview.js` remain
+  pure geometry/validation helpers. `fieldSheet.js` owns printable checklists.
+
+Optional point metadata is `description` (120 characters), `note` (1,000) and
+`needsRemeasure`. Document metadata includes name, baseline note/reminder and
+outline direction. The updated Swift Codable model preserves these fields and
+JSON checks cover round trips; native description/review UI is a later task.
+Older iOS builds may drop optional metadata when saving. The iOS app does not yet
+open web photo-project files.
+
+Unapplied measurement fields are intentionally not part of project downloads.
+Opening/replacing a project requires resolving the draft guard. Changing baseline
+or units must not silently reinterpret typed readings. Keep these boundaries when
+adding more entry or navigation tools.
+
+## Validation and remaining release checks
 
 ```sh
 cd web
 npm test
 npx playwright install chromium firefox webkit
 npm run test:browser
+npm run build
 ```
 
-The combined branch's GitHub Actions checks are the source of truth for its final
-commit: web Node 22/24 on Windows/Linux, browser suite plus repeated mobile drag,
-Docker smoke test, and macOS Swift checks plus unsigned simulator/device builds.
-A green unsigned build is not physical-device validation.
+Unit and browser coverage includes naming/metadata, grouped Undo, complete
+plot/photo history, immutable asset references, explicit modes, touch cancellation,
+stale drafts/read operations, both photo workflows, OCR failure fallback,
+projection, exports, browser recovery and narrow layouts. The final commit's
+GitHub Actions results are the source of truth; do not quote old test totals as
+validation of later edits.
 
-Remaining useful follow-up work for Claude:
+CI covers web Node 22/24 on Windows/Linux, Chromium/Firefox/mobile WebKit, repeated
+mobile interaction, Docker smoke checks, macOS Swift checks and unsigned
+simulator/device builds. Real iPhone Files/camera/AR use, handwriting accuracy,
+live Azure behavior, signing and a deployed origin remain separate checks.
 
-1. Smoke-test real iPhone Files import/export, camera OCR and AR placement.
-2. Try real pool photos and measurement sheets; check point matching usability
-   on touch devices and compare projected outlines against visible rim features.
-3. Gather representative handwriting samples before claiming OCR accuracy.
-   The controlled printed benchmark passed; handwriting acceptance is still open.
-4. Configure and test live Azure OCR only when service credentials and persistent
-   pilot-counter storage are available. Cloud OCR stays optional/disabled by default.
-5. If bringing photo overlays into iOS, explicitly implement the photo-project
-   format there; ordinary plot JSON intentionally remains a small shared format.
+Next focused follow-ups after this release:
 
-Do not claim real-device AR, real handwriting accuracy or live Azure validation
-from the automated checks. No cloud credentials are stored in the repository.
+1. Test actual pool photos, field sheets and mobile downloads with users on site.
+2. Add a deliberate project library only after learning which saved-project
+   organization users need; browser recovery is not a project manager.
+3. Design offline install/cache updates explicitly, including model assets and
+   version rollback. Do not imply a complete offline guarantee from local OCR.
+4. Improve OCR crop manipulation and side-by-side source/table review; gather
+   representative handwriting samples before making accuracy claims.
+5. Add native iOS description/reminder UI and, separately, photo-project support.
+   Preserve the small ordinary plot format for cross-platform measurements.
+
+Cloud OCR stays optional and disabled without explicit configuration. No cloud
+credentials belong in the repository. Use the release checklist before making
+public deployment, real-device AR or handwriting-accuracy claims.

@@ -14,182 +14,68 @@
   <body>
     <section id="startup" role="status"><p id="startup-message">Starting ABPlot… If this message stays visible, check your connection and reload the page.</p><button id="startup-retry" type="button" hidden>Reload editor</button><noscript>JavaScript must be enabled to use the editor.</noscript></section>
     <header class="app-bar" data-editor-region inert>
-      <div class="brand">
-        <h1>ABPlot</h1>
-        <p>Measure your pool. Check each point. Keep a clear plan.</p>
-      </div>
-      <div class="app-bar-actions">
-        <button id="undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
-        <button id="redo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
-        <button id="fit" type="button" title="Fit the plot in view (F)">Fit</button>
-      </div>
+      <div class="brand"><h1>ABPlot</h1><p>A clear plan, one measurement at a time.</p></div>
+      <div class="project-title"><label for="name" class="visually-hidden">Name</label><input id="name" type="text" placeholder="Name your pool project" maxlength="80" /><p id="save-status" class="status" role="status"></p></div>
+      <div class="app-bar-actions"><button id="import" type="button">Open project</button><button id="save-project" type="button" class="primary">Save project</button><button id="export-options-button" type="button">Export</button></div>
+      <div class="history-actions"><button id="undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button><button id="redo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button></div>
     </header>
-
+    <div class="workspace-bar" data-editor-region inert>
+      <nav aria-label="Workspace"><button id="workspace-plan" type="button" aria-pressed="true">Plan</button><button id="pool-photo-button" type="button" aria-pressed="false">Photo</button></nav>
+      <p id="status" class="status" role="status"></p>
+      <div class="save-recovery-actions"><button id="retry-save" type="button" hidden>Retry save</button><button id="recovery" type="button" hidden>Download previous save for recovery</button><button id="cancel-file" type="button" hidden>Cancel file read</button></div>
+      <input id="file" type="file" accept="application/json,.json" hidden />
+    </div>
     <main data-editor-region inert>
-      <section class="canvas-wrap" aria-label="Plot canvas">
-        <svg
-          id="canvas"
-          role="application"
-          aria-label="Plot canvas. Click to add a point, drag points and the A and B handles to move them."
-        ></svg>
-
-        <div class="canvas-overlay canvas-overlay-bottom-left">
-          <div id="scale-bar" class="scale-bar" hidden>
-            <div class="scale-bar-rule"></div>
-            <span id="scale-bar-label"></span>
-          </div>
-        </div>
-
-        <div class="canvas-overlay canvas-overlay-bottom-right">
-          <output id="readout" class="readout" aria-live="off"></output>
-          <div class="zoom-buttons">
-            <button id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
-            <button id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
-          </div>
-        </div>
-
-        <p id="empty-hint" class="empty-hint">Add your A/B readings, or click the rim points in walking order.</p>
+      <section id="plan-canvas" class="canvas-wrap" aria-label="Plot canvas">
+        <div class="plan-tools" role="toolbar" aria-label="Plan tools"><button id="tool-select" type="button" aria-pressed="true">Select</button><button id="tool-move" type="button" aria-pressed="false">Move</button><button id="tool-add" type="button" aria-pressed="false">Sketch points</button><button id="tool-done" type="button" hidden>Done</button><button id="fit" type="button" title="Fit the plot in view (F)">Fit</button></div>
+        <p id="tool-help" class="tool-help">Tap a point to review it. Drag the background to pan.</p>
+        <svg id="canvas" role="application" tabindex="0" aria-label="Pool plan. Select reviews points. Move enables dragging. Sketch points adds points."></svg>
+        <div class="canvas-overlay canvas-overlay-bottom-left"><div id="scale-bar" class="scale-bar" hidden><div class="scale-bar-rule"></div><span id="scale-bar-label"></span></div></div>
+        <div class="canvas-overlay canvas-overlay-bottom-right"><output id="readout" class="readout" aria-live="off"></output><div class="zoom-buttons"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
+        <p id="empty-hint" class="empty-hint">Start with your measured A–B distance, then add the rim points in walking order.</p>
       </section>
-
-      <aside class="panel">
-        <section class="panel-section">
-          <h2>Plot</h2>
-          <div class="field-row">
-            <label for="name">Name</label>
-            <input id="name" type="text" placeholder="Untitled plot" maxlength="80" />
+      <aside id="editor-panel" class="panel">
+        <div class="panel-navigation"><nav aria-label="Editor sections"><button id="panel-measure" data-panel="measure" aria-pressed="true">Measure</button><button id="panel-points" data-panel="points" aria-pressed="false">Points</button><button id="panel-checks" data-panel="checks" aria-pressed="false">Checks <span id="check-count"></span></button></nav><button id="panel-collapse" type="button" aria-expanded="true" aria-label="Collapse editor panel">⌄</button></div>
+        <div id="panel-content">
+          <div data-panel-content="measure">
+            <section class="panel-section"><h2>1 · Set the reference distance</h2><p class="note">A and B are where you measured from. Enter the distance between them.</p>
+              <form id="baseline-form"><div class="field-row"><label for="ab-distance">A–B distance</label><input id="ab-distance" type="number" min="0" step="any" inputmode="decimal" required /><select id="unit" aria-label="Unit"><option value="meters">m</option><option value="feet">ft</option></select></div><p id="baseline-preview" class="note" role="status"></p><div class="button-grid"><button id="baseline-apply" type="submit">Apply distance</button><button id="baseline-reset" type="button">Reset field</button></div></form>
+              <p id="scale-note" class="note"></p>
+            </section>
+            <section class="panel-section"><h2>2 · Add a measured point</h2><p class="note">Walk around the rim in either direction. Add each point in that order.</p><div id="quick-entry"></div><button id="bulk-entry" type="button">Paste, scan or import a table</button></section>
+            <section class="panel-section"><details><summary>Help &amp; advanced controls</summary><ul class="help"><li><b>Select</b> reviews a point. <b>Move</b> enables dragging points and A/B.</li><li>Changing A–B changes all drawing distances. Undo restores the previous scale.</li><li><b>Sketch points</b> adds approximate locations by tapping the plan.</li><li>Drag the background to pan. Pinch or use +/− to zoom.</li><li>Arrow keys nudge a selected point in Move mode. Escape returns to Select.</li><li>For exact offsets, open Points → Advanced coordinate table.</li></ul></details><p class="note"><a href="privacy.html" target="_blank" rel="noopener">Data &amp; privacy</a> · Save a project file before clearing browser data.</p></section>
           </div>
-          <p class="note">Titles the drawing and names its exported files.</p>
-          <p id="save-status" class="status" role="status"></p>
-          <button id="retry-save" type="button" hidden>Retry save</button>
-          <button id="recovery" type="button" hidden>Download previous save for recovery</button>
-        </section>
-
-        <section class="panel-section">
-          <h2>1 · Set your A–B reference</h2>
-          <div class="field-row">
-            <label for="ab-distance">A–B distance</label>
-            <input id="ab-distance" type="number" min="0" step="0.01" inputmode="decimal" />
-            <select id="unit" aria-label="Unit">
-              <option value="meters">m</option>
-              <option value="feet">ft</option>
-            </select>
+          <div data-panel-content="points" hidden>
+            <section id="point-review" class="panel-section"></section>
+            <section class="panel-section"><div class="section-head"><h2>Point sequence</h2><button id="add" type="button">Add point</button></div><details id="coordinate-table"><summary>Advanced coordinate table</summary><div class="table-scroll"><table id="measurements"><thead></thead><tbody></tbody></table><p id="points-empty" class="note">No points yet.</p></div><p id="extent-note" class="note"></p><button id="clear" type="button" class="link-button">Clear all points</button></details></section>
           </div>
-          <p class="note">Place A and B where you measured from. Drag either handle on the plan, then enter the distance between them.</p><p id="scale-note" class="note"></p>
-          <div class="button-grid primary-actions"><button id="bulk-entry" type="button">2 · Enter measurements</button><button id="pool-photo-button" type="button">Match a pool photo</button></div>
-          <p class="note">Walk around the rim in one direction. Add points in that same sequence.</p>
-        </section>
-
-        <section id="point-review" class="panel-section"></section>
-        <section id="outline-review" class="panel-section"></section>
-
-        <section class="panel-section panel-grow">
-          <div class="section-head">
-            <h2>Your point sequence</h2>
-            <div class="section-actions">
-              <button id="add" type="button" class="link-button">Add point</button>
-              <button id="clear" type="button" class="link-button">Clear all</button>
-            </div>
-          </div>
-          <div class="table-scroll">
-            <!-- Head and body are both built in app.js: the columns depend on
-                 whether a point is selected to measure the others against. -->
-            <table id="measurements">
-              <thead></thead>
-              <tbody></tbody>
-            </table>
-            <p id="points-empty" class="note">No points yet.</p>
-          </div>
-          <p id="extent-note" class="note"></p>
-        </section>
-
-        <section class="panel-section">
-          <h2>3 · Save & share</h2>
-          <div class="button-grid">
-            <button id="import" type="button">Import JSON…</button>
-            <button id="export-json" type="button">Export JSON</button>
-            <button id="export-csv" type="button">Export CSV</button>
-            <button id="export-svg" type="button">Export SVG</button>
-            <button id="export-png" type="button">Export PNG</button>
-            <button id="reset" type="button">New plot</button>
-          </div>
-          <input id="file" type="file" accept="application/json,.json" hidden />
-          <button id="cancel-file" type="button" hidden>Cancel file read</button>
-          <div class="field-row">
-            <label for="sheet">Plan sheet</label>
-            <select id="sheet">
-              <option value="">Fit to content</option>
-              <option value="a4-landscape">A4 landscape</option>
-              <option value="a4-portrait">A4 portrait</option>
-              <option value="a3-landscape">A3 landscape</option>
-              <option value="a3-portrait">A3 portrait</option>
-              <option value="letter-landscape">Letter landscape</option>
-              <option value="letter-portrait">Letter portrait</option>
-              <option value="tabloid-landscape">Tabloid landscape</option>
-            </select>
-            <select id="plan-scale" aria-label="Drawing scale" disabled>
-              <option value="">Auto</option>
-              <option value="20">1:20</option>
-              <option value="50">1:50</option>
-              <option value="100">1:100</option>
-              <option value="200">1:200</option>
-              <option value="500">1:500</option>
-              <option value="1000">1:1000</option>
-            </select>
-          </div>
-          <p id="sheet-note" class="note"></p>
-          <label class="checkbox">
-            <input id="annotate" type="checkbox" />
-            Label points with their measurements on SVG and PNG exports
-          </label>
-          <p class="note">
-            Open exported JSON in the updated iOS app using Plot files &amp; name → Open plot JSON.
-            Names, points, and scale travel with the file. Import an app backup here to continue editing.
-          </p>
-          <p id="status" class="status" role="status"></p>
-        </section>
-
-        <section class="panel-section">
-          <h2>How it works</h2>
-          <ul class="help">
-            <li>Click empty canvas to add a point; click a point to select it, drag to move it.</li>
-            <li>No mouse? <b>Add point</b> drops one in the middle of the view, ready to be typed into place.</li>
-            <li>
-              Or type: the <b>Along</b> and <b>Perp.</b> cells are editable, so a distance off a tape
-              measure places a point exactly.
-            </li>
-            <li>Click A, B, or a plotted point to review it. Use <b>Needs remeasurement</b> and a note for anything to check on site.</li>
-            <li>Drag the green <b>A</b> and red <b>B</b> handles to set the baseline.</li>
-            <li>The declared A–B distance scales everything else — every measurement follows from it.</li>
-            <li>Drag with the background, middle button or <kbd>Shift</kbd> to pan; scroll to zoom.</li>
-            <li>
-              <kbd>←↑→↓</kbd> nudge the selection (<kbd>Shift</kbd> for a bigger step),
-              <kbd>Delete</kbd> removes it, <kbd>Esc</kbd> deselects.
-            </li>
-          </ul>
-        </section>
-      <p class="note"><a href="privacy.html" target="_blank" rel="noopener">Data &amp; privacy</a> · Save JSON or a photo project before clearing browser data.</p>
+          <div data-panel-content="checks" hidden><section id="outline-review" class="panel-section"></section></div>
+        </div>
       </aside>
     </main>
-
+    <dialog id="export-options" aria-labelledby="export-title"><div class="section-head"><h2 id="export-title">Export &amp; print</h2><button id="export-close" type="button">Close</button></div><p>Save project keeps your work editable. Choose an export for printing, sharing, or opening measurements on your iPhone.</p>
+      <div class="button-grid"><button id="export-json" type="button">Export plot for iPhone</button><button id="export-csv" type="button">Export CSV</button><button id="export-svg" type="button">Export SVG</button><button id="export-png" type="button">Export PNG</button><button id="print-field-sheet" type="button">Print field sheet</button></div>
+      <div class="field-row"><label for="sheet">Plan sheet</label><select id="sheet"><option value="">Fit to content</option><option value="a4-landscape">A4 landscape</option><option value="a4-portrait">A4 portrait</option><option value="a3-landscape">A3 landscape</option><option value="a3-portrait">A3 portrait</option><option value="letter-landscape">Letter landscape</option><option value="letter-portrait">Letter portrait</option><option value="tabloid-landscape">Tabloid landscape</option></select><select id="plan-scale" aria-label="Drawing scale" disabled><option value="">Auto</option><option value="20">1:20</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option><option value="1000">1:1000</option></select></div><p id="sheet-note" class="note"></p><label class="checkbox"><input id="annotate" type="checkbox" /> Add measurements to the plan drawing</label><p class="note">The iPhone plot export contains measurements, descriptions and notes. Use Save project to include your photo.</p><button id="reset" type="button">New project</button>
+    </dialog>
     <dialog id="measurement-import" aria-labelledby="entry-title">
       <div class="section-head"><h2 id="entry-title">Enter measurements</h2><button id="entry-close" type="button">Close</button></div>
       <p>Paste a table, open a CSV, or read a photo. Nothing changes in your plot until you apply the reviewed points.</p>
       <label>Open CSV or text <input id="entry-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
       <div id="ocr-panel"></div>
       <label for="entry-text">Measurement text</label>
-      <textarea id="entry-text" rows="6" spellcheck="false" placeholder="P1, 1.5, -0.8&#10;P2, 2.0, 1.2"></textarea>
+      <textarea id="entry-text" rows="6" spellcheck="false" placeholder="1, 2.5, 3.0&#10;2, 3.2, 2.8"></textarea>
       <div class="entry-options">
-        <label>Measurements <select id="entry-mode"><option value="offsets">Along / perpendicular</option><option value="distances">Distances from A / B</option></select></label>
+        <label>Measurements <select id="entry-mode"><option value="distances">Distances from A / B</option><option value="offsets">Along / perpendicular</option></select></label>
         <label>Input units <select id="entry-unit"><option value="meters">Meters</option><option value="feet">Feet</option></select></label>
         <label>Apply as <select id="entry-action"><option value="append">Add points</option><option value="replace">Replace existing points</option></select></label>
-        <label>Field separator <select id="entry-delimiter"><option value="auto">Detect separator</option><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="space">Whitespace</option></select></label>
+        </div><details id="entry-advanced"><summary>Advanced format &amp; column mapping</summary><div class="entry-options"><label>Field separator <select id="entry-delimiter"><option value="auto">Detect separator</option><option value=",">Comma</option><option value=";">Semicolon</option><option value="tab">Tab</option><option value="space">Whitespace</option></select></label>
         <label>Decimal separator <select id="entry-decimal"><option value=".">Point (1.5)</option><option value=",">Comma (1,5)</option></select></label>
         <label class="checkbox"><input id="entry-header" type="checkbox" /> First row is a header</label>
         <label>Label column <input id="entry-label-column" type="number" min="1" max="30" value="1" /></label>
         <label>Along / A column <input id="entry-first-column" type="number" min="1" max="30" value="2" /></label>
         <label>Perpendicular / B column <input id="entry-second-column" type="number" min="1" max="30" value="3" /></label>
       </div>
-      <p class="note">Offsets: positive perpendicular is the canvas-down side of A→B. For A/B distances, choose the side for each row in the review. A and B keep their current scale and positions.</p>
+      </details><p class="note">Offsets: positive perpendicular is the canvas-down side of A→B. For A/B distances, choose the side for each row in the review. A and B keep their current scale and positions.</p>
       <button id="entry-review-button" type="button">Preview measurements</button>
       <p id="entry-status" role="status" aria-live="polite"></p>
       <section id="entry-review" hidden>

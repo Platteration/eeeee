@@ -1,6 +1,7 @@
 import { newId, UNITS, abDistanceMeters } from './plotDocument.js';
 import { canvasPoint, hasValidBaseline } from './plotMath.js';
 import { validateGeometry } from './validation.js';
+import { normalizePointDescription, validatePointLabel } from './pointNames.js';
 
 /** Quoted CSV/TSV, semicolon-separated rows, or whitespace field notes. */
 export function parseRows(text, { delimiter = 'auto', header = false, columns = [0, 1, 2] } = {}) {
@@ -46,16 +47,16 @@ export function measurementNumber(text, decimal = '.') {
   return number;
 }
 
-export function reviewMeasurements(rows, doc, { mode = 'offsets', unit = doc.unit, decimal = '.', replace = false } = {}) {
+export function reviewMeasurements(rows, doc, { mode = 'offsets', unit = doc.unit, decimal = '.', replace = false, existingPointId = null } = {}) {
   if (!Object.hasOwn(UNITS, unit)) throw new Error('Choose meters or feet.');
   if (!hasValidBaseline(doc.pointA, doc.pointB) || !(abDistanceMeters(doc) > 0)) throw new Error('Set a positive A–B distance and separate the baseline handles first.');
-  const seen = new Set(['a', 'b', ...(replace ? [] : doc.points.map(p => p.label.toLowerCase()))]);
+  const existing = existingPointId === null ? null : doc.points.find(point => point.id === existingPointId);
+  if (existingPointId !== null && (!existing || rows.length !== 1 || replace)) throw new Error('Choose one existing point to remeasure.');
+  const seen = [...(replace ? [] : doc.points)];
   const reviewed = rows.map(row => {
     try {
-      const label = row.label.trim();
-      if (!label || label.length > 40) throw new Error('Use a label between 1 and 40 characters.');
-      if (seen.has(label.toLowerCase())) throw new Error('Duplicate or reserved label. Rename this point.');
-      seen.add(label.toLowerCase());
+      const label = existing && row.label === existing.label ? existing.label : validatePointLabel(row.label, seen, existing?.id);
+      seen.push({ label });
       const first = measurementNumber(row.first, decimal) * UNITS[unit].toMeters;
       const second = measurementNumber(row.second, decimal) * UNITS[unit].toMeters;
       const baseline = abDistanceMeters(doc);
@@ -70,10 +71,14 @@ export function reviewMeasurements(rows, doc, { mode = 'offsets', unit = doc.uni
         t = Math.sqrt(Math.max(0, height)) * (row.side === 'below' ? 1 : -1); s = along;
       }
       if (![s, t].every(n => Number.isFinite(n) && Math.abs(n) <= 1e6)) throw new Error('Measurement exceeds one million baseline lengths.');
-      const point = { id: row.id ?? newId(), label, position: canvasPoint({ s, t }, doc.pointA, doc.pointB) };
+      const description = normalizePointDescription(row.description ?? existing?.description);
+      const point = { ...existing, id: existing?.id ?? row.id ?? newId(), label,
+        ...(description ? { description } : {}), position: canvasPoint({ s, t }, doc.pointA, doc.pointB) };
+      if (!description) delete point.description;
       validateGeometry({ ...doc, points: [point] });
       return { ...row, id: point.id, point, error: null };
     } catch (error) { return { ...row, point: null, error: error.message }; }
   });
-  return { rows: reviewed, document: { ...doc, points: [...(replace ? [] : doc.points), ...reviewed.filter(r => r.point).map(r => r.point)] }, valid: reviewed.length > 0 && reviewed.every(r => !r.error) };
+  const points = existing ? doc.points.map(point => point.id === existing.id && reviewed[0]?.point ? reviewed[0].point : point) : [...(replace ? [] : doc.points), ...reviewed.filter(r => r.point).map(r => r.point)];
+  return { rows: reviewed, document: { ...doc, points }, valid: reviewed.length > 0 && reviewed.every(r => !r.error) };
 }

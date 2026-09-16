@@ -1,3 +1,6 @@
+import { setupQuickEntry } from './quickEntry.js';
+import { validatePointLabel } from './pointNames.js';
+import { printFieldSheet } from './fieldSheet.js';
 import { setupReviewPanel } from './reviewPanel.js';
 /**
  * Wiring: the store owns the plot, the editor draws it, this module keeps the
@@ -6,20 +9,18 @@ import { setupReviewPanel } from './reviewPanel.js';
 
 import { Store } from './store.js';
 import { PlotEditor } from './editor.js';
-import { changeUnit, createPoint, defaultDocument, fileStem, parseDocument, UNITS } from './plotDocument.js';
+import { changeUnit, defaultDocument, fileStem, UNITS } from './plotDocument.js';
 import {
   isMeasurable,
   measurePoints,
-  metersPerCanvasUnit,
   plotExtent,
   positionForOffsets,
 } from './measurements.js';
 import { formatLength, formatSigned, toMeters } from './format.js';
-import { canvasABLength } from './plotMath.js';
-import { downloadCsv, downloadJson, downloadPng, downloadSvg, planContentSize } from './exporters.js';
+import { downloadCsv, downloadJson, downloadPng, downloadSvg, planContentSize, planFooterSize } from './exporters.js';
 import { drawingArea, fitScale, formatScale } from './paper.js';
 import { PREFERENCES_KEY, readPreferences } from './preferences.js';
-import { LatestOperation, withTimeout } from './operations.js';
+import { LatestOperation } from './operations.js';
 import { downloadText } from './exporters.js';
 import { setupImportPanel } from './importPanel.js';
 import { setupOcrPanel } from './ocrPanel.js';
@@ -80,8 +81,13 @@ function availableStorage() {
 }
 
 const storage = availableStorage();
-const store = Store.fromStorage(storage, { locks: navigator.locks ?? null });
+const newBrowserDocument = () => ({ ...defaultDocument(), abDistance: 0 });
+const store = Store.fromStorage(storage, { locks: navigator.locks ?? null, document: newBrowserDocument() });
 const fileOperation = new LatestOperation();
+let photoPanel = null, quickEntry = null, reviewPanel = null;
+let baselineDirty = false;
+let baselineDraftUnit = store.document.unit;
+let projectNameGroup = null;
 
 /**
  * Preferences about *output* rather than about the plot, kept apart from the
@@ -111,10 +117,17 @@ function setStatus(message, tone = 'ok') {
 
 function renderScale(doc) {
   if (document.activeElement !== ui.name) ui.name.value = doc.name ?? '';
-  if (document.activeElement !== ui.distance) ui.distance.value = String(doc.abDistance);
+  if (baselineDirty && baselineDraftUnit !== doc.unit) {
+    const entered = ui.distance.value.trim();
+    const converted = Number(entered) * UNITS[baselineDraftUnit].toMeters / UNITS[doc.unit].toMeters;
+    if (entered && Number.isFinite(converted)) {
+      ui.distance.value = String(converted); baselineDraftUnit = doc.unit;
+    }
+  }
+  if (!baselineDirty && document.activeElement !== ui.distance) ui.distance.value = doc.abDistance ? String(doc.abDistance) : '';
   ui.unit.value = doc.unit;
+  previewBaseline();
 
-  const symbol = UNITS[doc.unit].symbol;
   if (!isMeasurable(doc)) {
     ui.scaleNote.textContent =
       doc.abDistance > 0
@@ -122,11 +135,7 @@ function renderScale(doc) {
         : 'Enter the real-world distance between A and B to scale the plot.';
     return;
   }
-  const perUnit = metersPerCanvasUnit(doc);
-  const unitsPerOne = 1 / (perUnit / UNITS[doc.unit].toMeters);
-  ui.scaleNote.textContent =
-    `1 ${symbol} = ${unitsPerOne.toFixed(1)} canvas units · baseline ${canvasABLength(doc.pointA, doc.pointB).toFixed(0)} units. ` +
-    `Switching units converts the distance and keeps the same physical scale.`;
+  ui.scaleNote.textContent = `Reference set to ${formatLength(doc.abDistance * UNITS[doc.unit].toMeters, doc.unit)}. Changing units keeps the same physical distances.`;
 }
 
 /**
@@ -294,11 +303,12 @@ function renderTable(doc) {
     input.setAttribute('aria-label', `Label for point ${row.label}`);
     // 'change' (not 'input') so re-rendering never yanks the caret mid-typing.
     input.addEventListener('change', () => {
-      const label = input.value.trim() || row.label;
-      store.apply((draft) => {
-        const point = draft.points.find((p) => p.id === row.id);
-        if (point) point.label = label;
-      });
+      try {
+        const label = validatePointLabel(input.value, store.document.points, row.id);
+        store.apply(draft => { const point = draft.points.find(p => p.id === row.id); if (point) point.label = label; });
+        input.removeAttribute('aria-invalid');
+      } catch (error) { input.setAttribute('aria-invalid', 'true'); setStatus(error.message, 'error'); }
+
     });
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') input.blur();
@@ -338,7 +348,7 @@ function renderTable(doc) {
     actions.append(remove);
     const review = document.createElement('button'); review.type = 'button'; review.textContent = 'Review'; review.dataset.column = 'review'; review.className = 'row-review';
     review.setAttribute('aria-label', `Review measurements for point ${row.label}`);
-    review.addEventListener('click', event => { event.stopPropagation(); store.select(row.id); document.getElementById('review-details').open = true; document.getElementById('point-review').scrollIntoView({ block: 'nearest' }); });
+    review.addEventListener('click', event => { event.stopPropagation(); store.select(row.id); showPanel('points'); document.getElementById('review-details').open = true; document.getElementById('point-review').scrollIntoView({ block: 'nearest' }); });
     actions.append(review);
     tr.append(actions);
 
@@ -391,9 +401,9 @@ function scheduleTableRender() {
 
 function render() {
   const doc = store.document;
-  ui.saveStatus.textContent = store.saveError ?? (store.isSaving ? 'Saving…' : store.isEditing ? 'Editing… saves when you release the point.' : store.hasSaved
-    ? 'Saved in this browser. Export JSON for a portable backup.' : 'Autosave ready. Export JSON for a portable backup.');
-  ui.saveStatus.dataset.tone = store.saveError ? 'error' : 'ok';
+  const photoSave = photoPanel?.recoveryStatus;
+  ui.saveStatus.textContent = store.saveError ?? (photoSave?.state === 'error' ? photoSave.message : store.isSaving || photoSave?.state === 'saving' ? 'Saving browser recovery…' : store.isEditing ? 'Editing… saves when you release.' : photoPanel?.photo && photoSave?.state !== 'saved' ? 'Photo recovery pending. Save project for a portable copy.' : store.hasSaved ? 'Saved in this browser · Save project for a portable copy.' : 'Ready · Save project for a portable copy.');
+  ui.saveStatus.dataset.tone = store.saveError || photoSave?.state === 'error' ? 'error' : 'ok';
   ui.retrySave.hidden = !store.saveError;
   ui.retrySave.textContent = store.hasConflict ? 'Load latest save…' : store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
   ui.recovery.hidden = store.recoveryText === null;
@@ -418,23 +428,22 @@ function deletePoint(id) {
 }
 
 function loadDocument(doc, message) {
-  store.replace(doc);
-  editor.fit();
+  if (photoPanel && !photoPanel.replaceDocument(doc)) return false;
+  else if (!photoPanel) store.replace(doc);
+  baselineDirty = false; editor.setMode('select'); editor.fit();
   setStatus(message);
+  return true;
 }
 
 async function importFile(file) {
   if (!file) return;
   const current = fileOperation.start();
-  const revision = store.revision;
   $('cancel-file').hidden = false;
   setStatus(`Reading ${file.name}…`);
   try {
-    if (file.size > 5 * 1024 * 1024) throw new Error('Choose a plot JSON file smaller than 5 MB');
-    const doc = parseDocument(await withTimeout(file.text()));
-    if (!current()) return;
-    if (store.revision !== revision) throw new Error('The plot changed while the file was loading. Import again when ready.');
-    loadDocument(doc, `Imported ${file.name}. Undo restores the previous plot.`);
+    const opened = await photoPanel.openProject(file);
+    if (opened && current()) { baselineDirty = false; editor.setMode('select'); render(); setStatus(`Imported ${file.name}. Undo restores the previous project.`); }
+
   } catch (error) {
     if (current()) setStatus(`Could not import ${file.name}: ${error.message}`, 'error');
   } finally {
@@ -448,30 +457,34 @@ ui.name.addEventListener('input', () => {
   const name = ui.name.value;
   store.apply((draft) => {
     draft.name = name;
-  });
+  }, { historyGroup: projectNameGroup });
 });
 
-ui.distance.addEventListener('input', () => {
-  // A number input reports '' for anything it cannot parse -- including a
-  // half-typed value -- and Number('') is 0, which would quietly unscale the
-  // plot. Leave the document alone until the field says something meaningful.
-  const entered = ui.distance.value.trim();
-  const value = Number(entered);
-  if (entered === '' || !Number.isFinite(value) || value < 0) return;
-  try { store.apply((draft) => { draft.abDistance = value; }); }
-  catch (error) { setStatus(error.message, 'error'); }
+ui.name.addEventListener('focus', () => { projectNameGroup = Symbol('project-name'); });
+ui.name.addEventListener('blur', () => { projectNameGroup = null; });
+function previewBaseline() {
+  const entered = ui.distance.value.trim(), value = Number(entered);
+  const stale = baselineDirty && baselineDraftUnit !== store.document.unit;
+  const valid = entered !== '' && Number.isFinite(value) && value > 0 && !stale;
+  $('baseline-apply').disabled = !valid || !baselineDirty;
+  $('baseline-preview').textContent = stale ? 'Units changed. Re-enter the A–B distance in the current units.' : !valid ? 'Enter a positive distance between A and B.' : baselineDirty ? `${store.document.points.length ? `This rescales all ${store.document.points.length} points. ` : ''}Apply ${value} ${UNITS[store.document.unit].symbol}; Undo restores the previous scale.` : '';
+  $('baseline-preview').dataset.tone = valid || !baselineDirty ? 'ok' : 'error';
+}
+ui.distance.addEventListener('input', () => { baselineDirty = true; baselineDraftUnit = store.document.unit; previewBaseline(); });
+$('baseline-form').addEventListener('submit', event => {
+  event.preventDefault(); previewBaseline(); if ($('baseline-apply').disabled) return;
+  const value = Number(ui.distance.value);
+  try { store.apply(doc => { doc.abDistance = value; }); baselineDirty = false; previewBaseline(); setStatus('Reference distance applied.'); }
+  catch (error) { $('baseline-preview').textContent = error.message; }
 });
-
-// Leaving the field puts back what the plot actually uses, so a rejected entry
-// cannot sit there looking as though it took.
-ui.distance.addEventListener('blur', () => {
-  ui.distance.value = String(store.document.abDistance);
-});
+$('baseline-reset').addEventListener('click', () => { baselineDirty = false; ui.distance.value = store.document.abDistance ? String(store.document.abDistance) : ''; previewBaseline(); });
 
 ui.unit.addEventListener('change', () => {
   const unit = ui.unit.value;
-  try { store.apply((draft) => changeUnit(draft, unit)); }
-  catch (error) { renderScale(store.document); setStatus(error.message, 'error'); }
+  try {
+    store.apply(draft => changeUnit(draft, unit));
+  } catch (error) { renderScale(store.document); setStatus(error.message, 'error'); }
+  previewBaseline();
 });
 
 ui.retrySave.addEventListener('click', () => {
@@ -496,14 +509,7 @@ ui.fit.addEventListener('click', () => editor.fit());
 ui.zoomIn.addEventListener('click', () => editor.zoomBy(1.3));
 ui.zoomOut.addEventListener('click', () => editor.zoomBy(1 / 1.3));
 
-ui.add.addEventListener('click', () => {
-  // Selected, unlike a click on the canvas: the point was asked for rather than
-  // aimed at, so the next thing wanted is to type where it actually goes.
-  const point = createPoint(editor.viewCenter, store.document.points);
-  store.apply((draft) => draft.points.push(point));
-  store.select(point.id);
-  setStatus(`Added point ${point.label} — type its Along and Perp. to place it.`);
-});
+ui.add.addEventListener('click', () => { showPanel('measure'); quickEntry?.focus(); });
 
 ui.clear.addEventListener('click', () => {
   const count = store.document.points.length;
@@ -515,8 +521,12 @@ ui.clear.addEventListener('click', () => {
   setStatus(`Cleared ${count} point${count === 1 ? '' : 's'}. Ctrl+Z to undo.`);
 });
 
-ui.reset.addEventListener('click', () => { fileOperation.cancel(); $('cancel-file').hidden = true; loadDocument(defaultDocument(), 'Started a new plot. Ctrl+Z to undo.'); });
-$('cancel-file').addEventListener('click', () => { fileOperation.cancel(); $('cancel-file').hidden = true; setStatus('File read cancelled.'); });
+ui.reset.addEventListener('click', () => {
+  fileOperation.cancel(); $('cancel-file').hidden = true;
+  if (!loadDocument(newBrowserDocument(), 'Started a new project. Undo restores the previous project.')) return;
+  $('export-options').close(); photoPanel.close(); showPanel('measure');
+});
+$('cancel-file').addEventListener('click', () => { fileOperation.cancel(); photoPanel?.cancelOpen(); $('cancel-file').hidden = true; setStatus('File read cancelled.'); });
 
 ui.importButton.addEventListener('click', () => ui.file.click());
 ui.file.addEventListener('change', async () => {
@@ -612,7 +622,7 @@ function renderSheetNote() {
     ui.sheetNote.textContent = 'Set a distance and a baseline to draw the plan to scale.';
     return;
   }
-  const largest = fitScale(content, drawingArea(options.paper, options.orientation));
+  const largest = fitScale(content, drawingArea(options.paper, options.orientation, { footer: planFooterSize(store.document, options) }));
   if (options.scale) {
     const fits = largest !== null && options.scale >= largest;
     ui.sheetNote.textContent = fits
@@ -654,13 +664,14 @@ document.addEventListener('keydown', (event) => {
     store.redo();
     return;
   }
+  if (event.key === 'Escape') { editor.setMode('select'); store.select(null); return; }
   // Arrow keys, Space and Enter on native buttons belong to those controls.
   if (target instanceof HTMLElement && target.closest('button, a')) return;
 
   const selected = store.selectedPoint;
   switch (event.key) {
     case 'Escape':
-      store.select(null);
+      editor.setMode('select'); store.select(null);
       break;
     case 'Delete':
     case 'Backspace':
@@ -677,7 +688,7 @@ document.addEventListener('keydown', (event) => {
     case 'ArrowRight':
     case 'ArrowUp':
     case 'ArrowDown': {
-      if (!selected) return;
+      if (!selected || editor.mode !== 'move') return;
       event.preventDefault();
       // Nudge in screen pixels so the step feels the same at any zoom.
       const step = (event.shiftKey ? 10 : 1) * editor.unitsPerPixel;
@@ -709,5 +720,57 @@ editor.fit();
 // Handy in the console, and how the smoke tests drive the app.
 window.abplot = { store, editor };
 setupOcrPanel(setupImportPanel({ store, editor, setStatus }));
-setupPhotoPanel({ store, editor, setStatus });
-setupReviewPanel({ store, editor });
+reviewPanel = setupReviewPanel({ store, editor });
+quickEntry = setupQuickEntry({ store, editor, setStatus });
+photoPanel = setupPhotoPanel({ store, editor, setStatus,
+  onOpen: () => showWorkspace('photo'), onClose: () => showWorkspace('plan'), onRecoveryStatus: () => render(),
+  beforeReplace: () => {
+    const dirty = baselineDirty || quickEntry.hasDraft || reviewPanel.hasDraft || photoPanel?.hasDraft;
+    if (dirty && !confirm('Discard unapplied measurement fields and open another project? Saved measurements and recovery copies are kept.')) return false;
+    baselineDirty = false; quickEntry.discard(); reviewPanel.discardDrafts?.(); photoPanel?.discardDrafts(); return true;
+  }
+});
+window.abplot.photoPanel = photoPanel;
+function showWorkspace(view) {
+  const photo = view === 'photo';
+  $('plan-canvas').hidden = photo; $('editor-panel').hidden = photo;
+  document.querySelector('main').classList.toggle('photo-active', photo);
+  $('workspace-plan').setAttribute('aria-pressed', String(!photo)); $('pool-photo-button').setAttribute('aria-pressed', String(photo));
+  if (!photo) { editor.render(); }
+}
+function showPanel(name) {
+  for (const element of document.querySelectorAll('[data-panel-content]')) element.hidden = element.dataset.panelContent !== name;
+  for (const button of document.querySelectorAll('[data-panel]')) button.setAttribute('aria-pressed', String(button.dataset.panel === name));
+  $('panel-content').hidden = false; $('panel-collapse').setAttribute('aria-expanded', 'true');
+  $('editor-panel').classList.remove('collapsed');
+}
+for (const button of document.querySelectorAll('[data-panel]')) button.addEventListener('click', () => showPanel(button.dataset.panel));
+$('panel-collapse').addEventListener('click', () => { const collapsed = !$('panel-content').hidden; $('panel-content').hidden = collapsed; $('panel-collapse').setAttribute('aria-expanded', String(!collapsed)); $('editor-panel').classList.toggle('collapsed', collapsed); });
+$('workspace-plan').addEventListener('click', () => { photoPanel.close(); showWorkspace('plan'); });
+for (const [id, mode] of [['tool-select','select'],['tool-move','move'],['tool-add','add'],['tool-done','select']]) $(id).addEventListener('click', () => editor.setMode(mode));
+editor.addEventListener('modechange', event => {
+  const mode = event.detail;
+  for (const [id, key] of [['tool-select','select'],['tool-move','move'],['tool-add','add']]) $(id).setAttribute('aria-pressed', String(mode === key));
+  $('tool-done').hidden = mode === 'select';
+  $('tool-help').textContent = mode === 'move' ? 'Drag to move. Moving A or B changes the reference for every point. Done returns to Select.' : mode === 'add' ? 'Tap empty plan to sketch a point. Use A/B readings for exact placement. Done finishes sketching.' : 'Tap a point to review it. Drag the background to pan.';
+});
+editor.addEventListener('inspect', () => showPanel('points'));
+$('point-review').addEventListener('abplot:review', () => showPanel('points'));
+$('point-review').addEventListener('click', event => { if (event.target.id === 'review-edit-baseline') showPanel('measure'); });
+$('save-project').addEventListener('click', () => runExport($('save-project'), () => { const filename = photoPanel.saveProject(); setStatus(`Download requested: ${filename}. Unapplied measurement fields are not included.`); }));
+$('export-options-button').addEventListener('click', () => $('export-options').showModal());
+$('export-close').addEventListener('click', () => $('export-options').close());
+$('export-options').addEventListener('keydown', event => event.stopPropagation());
+$('print-field-sheet').addEventListener('click', () => runExport($('print-field-sheet'), () => printFieldSheet(store.document)));
+window.addEventListener('beforeunload', event => { if (baselineDirty || quickEntry.hasDraft || reviewPanel.hasDraft) { event.preventDefault(); event.returnValue = ''; } });
+previewBaseline(); render();
+
+function updateTypingLayout() {
+  const element = document.activeElement, viewport = window.visualViewport;
+  const keyboardOpen = viewport && viewport.height < window.innerHeight - 120;
+  document.querySelector('main').classList.toggle('field-editing', !!keyboardOpen && element instanceof HTMLElement && !!element.closest('#panel-content') && ['INPUT','TEXTAREA'].includes(element.tagName));
+  if (viewport) document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
+}
+window.visualViewport?.addEventListener('resize', updateTypingLayout);
+document.addEventListener('focusin', updateTypingLayout);
+document.addEventListener('focusout', () => requestAnimationFrame(updateTypingLayout));

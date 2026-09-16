@@ -1,13 +1,14 @@
+import { seedBaseline, addPoint } from './helpers.js';
 import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/'); await expect.poll(() => page.evaluate(() => Boolean(window.abplot))).toBe(true);
+  await seedBaseline(page); await page.goto('/'); await expect.poll(() => page.evaluate(() => Boolean(window.abplot))).toBe(true);
   expect(errors).toEqual([]);
 });
-const open = async page => { await page.getByRole('button', { name: '2 · Enter measurements', exact: true }).click(); };
+const open = async page => { await page.locator('#bulk-entry').click(); };
 test('review, correct, apply and undo 250 points', async ({ page }) => {
-  await open(page);
+  await open(page); await page.locator('#entry-mode').selectOption('offsets');
   await page.locator('#entry-text').fill(Array.from({ length: 250 }, (_, i) => `P${i},${i / 10},${i % 10}`).join('\n'));
   await page.locator('#entry-review-button').click();
   await expect(page.locator('#entry-rows tr')).toHaveCount(250);
@@ -32,11 +33,11 @@ test('two tabs preserve first save and allow the stale plot to be downloaded', a
   await page.locator('#name').fill('First tab'); await expect(page.locator('#save-status')).toContainText('Saved');
   await second.locator('#name').fill('Other tab'); await expect(second.locator('#save-status')).toContainText('Another tab');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('abplot.web.document.v1')).name)).toBe('First tab');
-  const download = second.waitForEvent('download'); await second.locator('#export-json').click(); expect((await download).suggestedFilename()).toBe('other-tab.json');
+  const download = second.waitForEvent('download'); await second.locator('#save-project').click(); expect((await download).suggestedFilename()).toBe('other-tab.json');
 });
 test('bad preferences cannot break startup and overflow leaves the plot unchanged', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('abplot.web.preferences.v1', '{"sheet":42,"planScale":{}}'));
-  await page.reload(); await page.locator('#add').click();
+  await page.reload(); await addPoint(page);
   const before = await page.evaluate(() => JSON.stringify(window.abplot.store.document));
   await page.getByLabel('Along for point 1', { exact: true }).fill('1e308'); await page.getByLabel('Along for point 1', { exact: true }).press('Enter');
   await expect(page.locator('#status')).toContainText('supported range');
@@ -51,7 +52,7 @@ test('a delayed JSON read cannot overwrite newer edits and can be cancelled', as
   await page.locator('#file').setInputFiles({ name: 'slow.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
   await page.locator('#name').fill('Newer work');
   await page.evaluate(() => window.finishRead(JSON.stringify({ pointA: [100, 400], pointB: [300, 400], abDistance: 2, points: [] })));
-  await expect(page.locator('#status')).toContainText('plot changed');
+  await expect(page.locator('#status')).toContainText('project changed');
   await expect(page.locator('#name')).toHaveValue('Newer work');
   await page.locator('#file').setInputFiles({ name: 'slow.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
   await page.locator('#cancel-file').click();
@@ -61,7 +62,7 @@ test('a delayed JSON read cannot overwrite newer edits and can be cancelled', as
 
 test('failed downloads explain the problem and release the export button', async ({ page }) => {
   await page.evaluate(() => { URL.createObjectURL = () => { throw new Error('Downloads blocked'); }; });
-  await page.locator('#export-json').click();
+  await page.locator('#export-options-button').click(); await page.locator('#export-json').click();
   await expect(page.locator('#status')).toContainText('Downloads blocked');
   await expect(page.locator('#export-json')).toBeEnabled();
 });

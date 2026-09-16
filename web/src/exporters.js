@@ -13,6 +13,7 @@ import { MM_PER_PX, drawingArea, fitScale, formatScale, mmPerMeter, sheetSize } 
 import { formatCompact, formatLength, formatSigned, fromMeters, niceStep } from './format.js';
 import { validateGeometry } from './validation.js';
 import { withTimeout } from './operations.js';
+import { reviewOutline } from './plotReview.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -55,6 +56,7 @@ export function toCsv(doc) {
   validateGeometry(doc);
   const unit = UNITS[doc.unit].symbol;
   const rows = measurePoints(doc);
+  const points = new Map(doc.points.map(point => [point.id, point]));
   const header = [
     'label',
     'canvas_x',
@@ -65,6 +67,9 @@ export function toCsv(doc) {
     `perpendicular_${unit}`,
     `from_a_${unit}`,
     `from_b_${unit}`,
+    'description',
+    'needs_remeasurement',
+    'note',
   ];
   const number = (meters) => (meters === null ? '' : fromMeters(meters, doc.unit).toFixed(4));
   const lines = [header.join(',')];
@@ -80,10 +85,62 @@ export function toCsv(doc) {
         number(row.perp),
         number(row.fromA),
         number(row.fromB),
+        csvCell(points.get(row.id)?.description),
+        points.get(row.id)?.needsRemeasure === true ? 'yes' : '',
+        csvCell(points.get(row.id)?.note),
       ].join(','),
     );
   }
   return `${lines.join('\n')}\n`;
+}
+
+/** Wrap plain text conservatively without losing words or Unicode characters. */
+function wrapText(value, limit) {
+  const characters = Array.from(String(value).replace(/\s+/gu, ' ').trim());
+  const lines = [];
+  while (characters.length > limit) {
+    const candidate = characters.slice(0, limit + 1).lastIndexOf(' ');
+    const cut = candidate > limit / 2 ? candidate : limit;
+    lines.push(characters.splice(0, cut).join(''));
+    while (characters[0] === ' ') characters.shift();
+  }
+  if (characters.length) lines.push(characters.join(''));
+  return lines;
+}
+
+const markerLabel = label => Array.from(String(label)).length > 8
+  ? `${Array.from(String(label)).slice(0, 7).join('')}…` : label;
+
+/** A separate point key keeps descriptions and review context off the drawing. */
+function legendLayout(doc, { paper = null, orientation = 'landscape', width = 1000, padding = 48 } = {}) {
+  const pageWidth = paper ? sheetSize(paper, orientation).width / MM_PER_PX : width;
+  const available = pageWidth - padding * 2;
+  const columns = Math.max(1, Math.min(3, Math.floor(available / 340)));
+  const columnWidth = available / columns;
+  const lineLimit = Math.max(16, Math.floor((columnWidth - 20) / 7));
+  const entries = doc.points.filter(point => point.description || point.needsRemeasure || markerLabel(point.label) !== point.label)
+    .map(point => [point.label, point.description, point.needsRemeasure ? 'Remeasure' : null].filter(Boolean).join(' · '));
+  if (doc.baselineNeedsRemeasure) entries.unshift('A–B · Remeasure reference distance');
+  const rows = [];
+  let height = 0;
+  for (let index = 0; index < entries.length; index += columns) {
+    const cells = entries.slice(index, index + columns).map(entry => wrapText(entry, lineLimit));
+    rows.push({ cells, y: height });
+    height += Math.max(...cells.map(lines => lines.length)) * 16 + 8;
+  }
+  const hasReminder = doc.baselineNeedsRemeasure || doc.points.some(point => point.needsRemeasure);
+  const hasWarning = reviewOutline(doc).warnings.some(warning => warning.ids.length);
+  const key = [hasReminder ? 'Amber ring: remeasurement reminder' : null, hasWarning ? 'Dashed red ring: outline check' : null].filter(Boolean).join(' · ');
+  const keyLines = key ? wrapText(key, Math.max(16, Math.floor(available / 7))) : [];
+  return { rows, columnWidth, keyLines, height: height + keyLines.length * 16 + (height || key ? 16 : 0) };
+}
+
+/** Footer reserve in millimetres for paper, or pixels for a fitted image. */
+export function planFooterSize(doc, options = {}) {
+  const legend = legendLayout(doc, options);
+  return options.paper
+    ? (doc.name?.trim() ? 24 : 16) + legend.height * MM_PER_PX
+    : (doc.name?.trim() ? 108 : 78) + legend.height;
 }
 
 /**
@@ -147,6 +204,7 @@ function paperLayout(doc, { paper, orientation, ratio, margin, footer, annotate 
 
   const bounds = contentBounds(doc);
   const area = drawingArea(paper, orientation, { margin, footer });
+  if (area.width <= 0 || area.height <= 0) return null;
   const scale = ratio ?? fitScale(content, area);
   if (!scale) return null;
 
@@ -211,19 +269,24 @@ export function toSvg(
   // A named plot gets a title line, and the strip beneath the drawing grows to
   // hold it.
   const name = doc.name?.trim() ?? '';
-  const layout =
-    (paper &&
-      paperLayout(doc, {
+  const paperOptions = { paper, orientation, width, padding };
+  const onPaper = paper && paperLayout(doc, {
         paper,
         orientation,
         ratio: scale,
         margin: 12,
-        footer: name ? 24 : 16,
+        footer: planFooterSize(doc, paperOptions),
         annotate,
-      })) ||
+      });
+  if (paper && scale && (!onPaper || !onPaper.fits)) {
+    throw new Error('The plot and point legend do not fit this sheet at the selected scale. Choose Fit to sheet, a larger sheet, or a fitted SVG.');
+  }
+  const layout = onPaper ||
     // Falling back keeps a plot exportable even when it has no scale to print
     // at, or is too large for any standard ratio on the chosen sheet.
-    fittedLayout(doc, { width, padding, footer: name ? 108 : 78 });
+    fittedLayout(doc, { width, padding, footer: planFooterSize(doc, { width, padding }) });
+
+  const legend = legendLayout(doc, { ...paperOptions, paper: layout.scale ? paper : null });
 
   const { viewBox, px } = layout;
   if (![...Object.values(viewBox), px].every(Number.isFinite) || px <= 0) throw new Error('This plot cannot be laid out at the selected scale.');
@@ -267,13 +330,25 @@ export function toSvg(
       `stroke="#8a8a8e" stroke-width="${2 * px}" stroke-dasharray="${6 * px} ${4 * px}"/>`,
   );
 
+  if (doc.outlineDirection !== 'off' && doc.points.length >= 3) {
+    parts.push(`<polygon data-outline="pool" points="${doc.points.map(point => `${point.position.x},${point.position.y}`).join(' ')}" ` +
+      `fill="#0a84ff" fill-opacity="0.04" stroke="#0a84ff" stroke-width="${1.5 * px}"/>`);
+  }
+
+  const warningIds = new Set(reviewOutline(doc).warnings.flatMap(warning => warning.ids));
+  const reviewRings = (position, reminder, warning, radius) => {
+    if (reminder) parts.push(`<circle data-review="reminder" cx="${position.x}" cy="${position.y}" r="${radius * px}" fill="none" stroke="#b66c00" stroke-width="${2.5 * px}"/>`);
+    if (warning) parts.push(`<circle data-review="outline-check" cx="${position.x}" cy="${position.y}" r="${(radius + (reminder ? 5 : 0)) * px}" fill="none" stroke="#b42318" stroke-width="${2 * px}" stroke-dasharray="${4 * px} ${3 * px}"/>`);
+  };
+
   const annotations = annotate ? new Map(measurePoints(doc).map((row) => [row.id, row])) : null;
   for (const point of doc.points) {
+    reviewRings(point.position, point.needsRemeasure, warningIds.has(point.id), 15);
     parts.push(
       `<circle cx="${point.position.x}" cy="${point.position.y}" r="${12 * px}" fill="#0a84ff" ` +
         `stroke="#ffffff" stroke-width="${1.5 * px}"/>`,
       `<text x="${point.position.x}" y="${point.position.y}" font-size="${11 * px}" fill="#ffffff" ` +
-        `text-anchor="middle" dominant-baseline="central">${escapeXml(point.label)}</text>`,
+        `text-anchor="middle" dominant-baseline="central">${escapeXml(markerLabel(point.label))}</text>`,
     );
 
     const row = annotations?.get(point.id);
@@ -295,6 +370,7 @@ export function toSvg(
     ['A', doc.pointA, '#34c759'],
     ['B', doc.pointB, '#ff3b30'],
   ]) {
+    reviewRings(position, doc.baselineNeedsRemeasure, false, 18);
     parts.push(
       `<circle cx="${position.x}" cy="${position.y}" r="${15 * px}" fill="${fill}" stroke="#ffffff" ` +
         `stroke-width="${2 * px}"/>`,
@@ -352,6 +428,16 @@ export function toSvg(
     `<text x="${viewBox.x + viewBox.w - padding * px}" y="${footerY + 20 * px}" font-size="${13 * px}" ` +
       `fill="#48484a" text-anchor="end">${escapeXml(summary)}</text>`,
   );
+
+  const legendY = footerY + 48 * px;
+  for (const row of legend.rows) {
+    row.cells.forEach((lines, column) => lines.forEach((line, index) => {
+      parts.push(`<text x="${left + column * legend.columnWidth * px}" y="${legendY + (row.y + index * 16) * px}" ` +
+        `font-size="${12 * px}" fill="#333a45">${escapeXml(line)}</text>`);
+    }));
+  }
+  const keyY = legendY + (legend.rows.length ? legend.rows.at(-1).y + Math.max(...legend.rows.at(-1).cells.map(lines => lines.length)) * 16 + 8 : 0) * px;
+  legend.keyLines.forEach((line, index) => parts.push(`<text x="${left}" y="${keyY + index * 16 * px}" font-size="${11 * px}" fill="#555e6b">${escapeXml(line)}</text>`));
 
   parts.push('</svg>');
   return parts.join('\n');

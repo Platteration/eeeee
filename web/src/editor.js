@@ -45,6 +45,7 @@ export class PlotEditor extends EventTarget {
   #pointers = new Map();
   #pinch = null;
   #reviewWarnings = new Set();
+  #mode = 'select';
 
   constructor(svg, store) {
     super();
@@ -76,6 +77,13 @@ export class PlotEditor extends EventTarget {
 
     store.subscribe(() => this.render());
     new ResizeObserver(() => this.render()).observe(svg);
+  }
+
+  get mode() { return this.#mode; }
+  setMode(mode) {
+    if (!['select', 'move', 'add'].includes(mode)) return;
+    this.finishGesture(); this.#mode = mode; this.#svg.dataset.mode = mode;
+    this.dispatchEvent(new CustomEvent('modechange', { detail: mode }));
   }
 
   setReviewWarnings(ids) {
@@ -180,7 +188,12 @@ export class PlotEditor extends EventTarget {
 
     if (event.button === 1 || event.shiftKey || !role) {
       this.#gesture = { kind: 'background', pointerId: event.pointerId, start, moved: false,
-        panOnly: event.button === 1 || event.shiftKey };
+        panOnly: event.button === 1 || event.shiftKey || this.#mode !== 'add' };
+      return;
+    }
+
+    if (this.#mode !== 'move') {
+      this.#gesture = { kind: 'select', pointerId: event.pointerId, start, moved: false, id: target.dataset.id, reference: target.dataset.handle };
       return;
     }
 
@@ -205,7 +218,6 @@ export class PlotEditor extends EventTarget {
 
     if (role === 'handle') {
       const which = target.dataset.handle;
-      this.dispatchEvent(new CustomEvent('reference', { detail: which }));
       const anchor = which === 'A' ? this.#store.document.pointA : this.#store.document.pointB;
       this.#store.begin();
       this.#gesture = {
@@ -236,6 +248,8 @@ export class PlotEditor extends EventTarget {
       if (travelled < DRAG_THRESHOLD * this.#view.unitsPerPixel) return;
       gesture.moved = true;
     }
+
+    if (gesture.kind === 'select') return;
 
     if (gesture.kind === 'background') {
       // `here` is measured against the current view, so shifting the centre by
@@ -275,23 +289,28 @@ export class PlotEditor extends EventTarget {
     this.#gesture = null;
     if (this.#svg.hasPointerCapture(event.pointerId)) this.#svg.releasePointerCapture(event.pointerId);
 
+    if (gesture.kind === 'select') {
+      if (!gesture.moved) {
+        if (gesture.reference) this.dispatchEvent(new CustomEvent('reference', { detail: gesture.reference }));
+        else this.#store.select(gesture.id);
+        this.dispatchEvent(new CustomEvent('inspect'));
+      }
+      return;
+    }
     if (gesture.kind === 'background') {
       if (gesture.moved || gesture.panOnly) return;
       // A click on empty canvas: deselect if something is selected, otherwise
       // add a point -- the same rule the iOS editor uses for a tap.
-      if (this.#store.selectedId !== null) {
-        this.#store.select(null);
-      } else {
-        // Deliberately not selected: leaving the new point unselected is what
-        // lets the next click add another one rather than deselect this one.
-        const point = createPoint(this.#toCanvas(event), this.#store.document.points);
-        this.#store.apply((draft) => draft.points.push(point));
-      }
+      const point = createPoint(this.#toCanvas(event), this.#store.document.points);
+      this.#store.apply((draft) => draft.points.push(point));
       return;
     }
 
     this.#store.end();
-    if (!gesture.moved && gesture.kind === 'point' && gesture.wasSelected) this.#store.select(null);
+    if (!gesture.moved) {
+      if (gesture.kind === 'handle') this.dispatchEvent(new CustomEvent('reference', { detail: gesture.which }));
+      this.dispatchEvent(new CustomEvent('inspect'));
+    }
   };
 
   /** Finish a move without interpreting interruption as a tap or deselection. */
@@ -474,7 +493,7 @@ export class PlotEditor extends EventTarget {
         'data-id': point.id,
         class: `${selected ? 'point selected' : 'point'}${point.needsRemeasure ? ' needs-remeasure' : ''}${this.#reviewWarnings.has(point.id) ? ' order-warning' : ''}`,
       });
-      group.append(el('title', {}, `${point.label}${point.needsRemeasure ? ' · needs remeasurement' : ''}${point.note ? ` · ${point.note}` : ''}`));
+      group.append(el('title', {}, `${point.label}${point.needsRemeasure ? ' · needs remeasurement' : ''}${point.description ? ` · ${point.description}` : ''}${point.note ? ` · ${point.note}` : ''}`));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r: 22 * px,
         fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r, class: 'point-dot' }));

@@ -1,5 +1,6 @@
 import { parseDocument, toWireFormat } from './plotDocument.js';
 import { measurePoints } from './measurements.js';
+import { pointDisplayName } from './pointNames.js';
 
 export const PHOTO_PROJECT_FORMAT = 'abplot-photo-project';
 export const photoSettings = () => ({ opacity: 0.9, labels: true, distances: false, outline: true, closed: true, project: false });
@@ -85,7 +86,7 @@ export function parsePhotoProject(text) {
 }
 
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
-export function photoOverlaySvg(doc, photo, { selected = null, markerSize = Math.max(photo.width, photo.height) / 80, includePhoto = true } = {}) {
+export function photoOverlaySvg(doc, photo, { selected = null, markerSize = Math.max(photo.width, photo.height) / 80, includePhoto = true, interactive = false } = {}) {
   const { points } = overlayGeometry(doc, photo), byId = new Map(points.map(p => [p.id, p]));
   const measurements = new Map(measurePoints(doc).map(p => [p.id, p]));
   const size = markerSize, pieces = [];
@@ -105,7 +106,10 @@ export function photoOverlaySvg(doc, photo, { selected = null, markerSize = Math
   }
   for (const point of points) {
     const { x, y } = point.photo, color = point.id === 'A' ? '#34c759' : point.id === 'B' ? '#ff3b30' : '#00e5ff';
-    pieces.push(`<g data-photo-id="${escape(point.id)}"><circle cx="${x}" cy="${y}" r="${size}" fill="${point.matched ? color : '#0008'}" stroke="${selected === point.id ? '#ffea00' : '#fff'}" stroke-width="${size / 5}"/>`);
+    pieces.push(`<g data-photo-id="${escape(point.id)}"><title>${escape(pointDisplayName(point) + (point.needsRemeasure ? ' · needs remeasurement' : ''))}</title>`);
+    // 44 CSS-pixel hit targets on screen; keep the exported marker compact.
+    if (interactive) pieces.push(`<rect x="${x - size * 2.45}" y="${y - size * 2.45}" width="${size * 4.9}" height="${size * 4.9}" fill="transparent" data-photo-hit=""/>`);
+    pieces.push(`<circle cx="${x}" cy="${y}" r="${size}" fill="${point.matched ? color : '#0008'}" stroke="${selected === point.id ? '#ffea00' : '#fff'}" stroke-width="${size / 5}"/>`);
     if (photo.settings.labels) {
       let label = point.label + (point.needsRemeasure ? ' · remeasure' : '');
       const m = measurements.get(point.id);

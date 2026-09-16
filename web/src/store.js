@@ -12,6 +12,7 @@
 
 import { defaultDocument, parseDocument } from './plotDocument.js';
 import { validateGeometry } from './validation.js';
+import { clonePhotoState, samePhotoState } from './projectState.js';
 
 const STORAGE_KEY = 'abplot.web.document.v1';
 const HISTORY_LIMIT = 100;
@@ -38,6 +39,8 @@ export class Store {
   #queue = Promise.resolve();
   #revision = 0;
   #epoch = 0;
+  #photo = null;
+  #historyGroup = null;
 
   constructor({ document: doc = defaultDocument(), storage = null, locks = undefined } = {}) {
     validateGeometry(doc);
@@ -50,8 +53,8 @@ export class Store {
    * Restore the last session's plot, falling back to a fresh document when
    * nothing is stored or what is stored no longer parses.
    */
-  static fromStorage(storage, { locks } = {}) {
-    const store = new Store({ storage, locks });
+  static fromStorage(storage, { locks, document = defaultDocument() } = {}) {
+    const store = new Store({ storage, locks, document });
     let saved;
     try {
       saved = storage?.getItem(STORAGE_KEY) ?? null;
@@ -78,6 +81,7 @@ export class Store {
   }
 
   get revision() { return this.#revision; }
+  get projectPhoto() { return this.#photo; }
   get hasConflict() { return this.#conflict; }
   get isSaving() { return this.#saving > 0; }
   whenSaved() { return this.#queue; }
@@ -90,6 +94,7 @@ export class Store {
     this.#conflict = false;
     this.#saveError = this.#loadError = this.#recoveryText = null;
     this.#pending = null;
+    this.#photo = null; this.#historyGroup = null;
     this.#undo = []; this.#redo = [];
     this.#doc = doc; this.#selectedId = null; this.#revision++;
     this.#hasSaved = saved !== null;
@@ -135,23 +140,37 @@ export class Store {
   }
 
   /** Apply `mutate(draft)` as one undoable edit. */
-  apply(mutate) {
+  apply(mutate, options = {}) {
+    return this.applyProject(project => mutate(project.document), options);
+  }
+
+  /** Update document and photo together, retaining image assets by reference. */
+  applyProject(mutate, { historyGroup = null } = {}) {
     this.end();
-    const before = clone(this.#doc);
-    const draft = clone(this.#doc);
+    const before = this.#snapshot();
+    const draft = this.#snapshot();
     mutate(draft);
-    validateGeometry(draft);
-    if (JSON.stringify(draft) === JSON.stringify(before)) return;
-    this.#doc = draft;
+    validateGeometry(draft.document);
+    if (this.#same(before, draft)) { if (historyGroup !== this.#historyGroup) this.#historyGroup = null; return; }
+    this.#doc = draft.document;
+    this.#photo = draft.photo;
     this.#revision++;
-    this.#pushUndo(before);
+    if (historyGroup === null || historyGroup !== this.#historyGroup) this.#pushUndo(before);
+    else this.#redo.length = 0;
+    this.#historyGroup = historyGroup;
     this.#changed();
   }
+
+  endHistoryGroup() { this.#historyGroup = null; }
+
+  #snapshot() { return { document: clone(this.#doc), photo: clonePhotoState(this.#photo) }; }
+  #same(a, b) { return JSON.stringify(a.document) === JSON.stringify(b.document) && samePhotoState(a.photo, b.photo); }
 
   /** Start a gesture whose intermediate states should not enter the history. */
   begin() {
     this.end();
-    this.#pending = clone(this.#doc);
+    this.#historyGroup = null;
+    this.#pending = this.#snapshot();
   }
 
   /** Apply a frame of an in-progress gesture. */
@@ -170,7 +189,7 @@ export class Store {
     const before = this.#pending;
     this.#pending = null;
     if (!before) return;
-    if (JSON.stringify(before) === JSON.stringify(this.#doc)) {
+    if (this.#same(before, this.#snapshot())) {
       this.#changed(false);
       return;
     }
@@ -195,23 +214,28 @@ export class Store {
 
   select(id) {
     if (this.#selectedId === id) return;
+    this.#historyGroup = null;
     this.#selectedId = id;
     this.#changed(false);
   }
 
   undo() {
     this.end();
+    this.#historyGroup = null;
     if (!this.canUndo) return;
-    this.#redo.push(clone(this.#doc));
-    this.#doc = this.#undo.pop();
+    this.#redo.push(this.#snapshot());
+    const snapshot = this.#undo.pop();
+    this.#doc = snapshot.document; this.#photo = snapshot.photo;
     this.#afterHistoryStep();
   }
 
   redo() {
     this.end();
+    this.#historyGroup = null;
     if (!this.canRedo) return;
-    this.#undo.push(clone(this.#doc));
-    this.#doc = this.#redo.pop();
+    this.#undo.push(this.#snapshot());
+    const snapshot = this.#redo.pop();
+    this.#doc = snapshot.document; this.#photo = snapshot.photo;
     this.#afterHistoryStep();
   }
 

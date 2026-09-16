@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { planContentSize, rasterSize, toCsv, toSvg } from '../src/exporters.js';
+import { planContentSize, planFooterSize, rasterSize, toCsv, toSvg } from '../src/exporters.js';
 import { drawingArea, fitScale } from '../src/paper.js';
 
 const doc = {
@@ -33,7 +33,7 @@ describe('toCsv', () => {
   it('writes a header and one row per point', () => {
     const lines = toCsv(doc).trim().split('\n');
     assert.equal(lines.length, 3);
-    assert.match(lines[0], /^label,canvas_x,canvas_y,s_along_ab,t_perpendicular,along_m,perpendicular_m,from_a_m,from_b_m$/);
+    assert.match(lines[0], /^label,canvas_x,canvas_y,s_along_ab,t_perpendicular,along_m,perpendicular_m,from_a_m,from_b_m,description,needs_remeasurement,note$/);
     const [label, x, y, s, t, along, perp, fromA, fromB] = lines[1].split(',');
     assert.deepEqual([label, x, y], ['1', '200.00', '200.00']);
     assert.equal(Number(s), 0.5);
@@ -57,7 +57,16 @@ describe('toCsv', () => {
 
   it('leaves measurement columns empty when there is no baseline', () => {
     const csv = toCsv({ ...doc, abDistance: 0 });
-    assert.deepEqual(csv.split('\n')[1].split(','), ['1', '200.00', '200.00', '', '', '', '', '', '']);
+    assert.deepEqual(csv.split('\n')[1].split(','), ['1', '200.00', '200.00', '', '', '', '', '', '', '', '', '']);
+  });
+
+  it('appends descriptions, flags and multiline notes with safe spreadsheet text', () => {
+    const point = { ...doc.points[0], description: '=SUM(1,2)', needsRemeasure: true, note: 'Steps "north"\n↗ Check tape' };
+    const csv = toCsv({ ...doc, points: [point] });
+    assert.match(csv, /,"'=SUM\(1,2\)",yes,"Steps ""north""\n↗ Check tape"\n$/);
+    for (const text of [' @command', '\tformula', '-12 is a name', '+note']) {
+      assert.ok(toCsv({ ...doc, points: [{ ...point, description: text, note: text }] }).includes(`'${text}`));
+    }
   });
 });
 
@@ -127,6 +136,31 @@ describe('toSvg', () => {
     assertBalancedTags(unscaled);
     assert.doesNotMatch(unscaled, /<line[^>]*stroke="#1c1c1e"/);
   });
+
+  it('draws the ordered outline and differentiates reminders from outline checks', () => {
+    const points = [[100,100], [300,300], [100,300], [300,100]].map(([x,y], index) => ({ id: `p${index}`, label: String(index + 1), position: { x,y } }));
+    points[0].needsRemeasure = true;
+    const reviewed = { ...doc, points, baselineNeedsRemeasure: true };
+    const svg = toSvg(reviewed);
+    assert.match(svg, /<polygon data-outline="pool" points="100,100 300,300 100,300 300,100"/);
+    assert.equal(svg.match(/data-review="reminder"/g).length, 3);
+    assert.equal(svg.match(/data-review="outline-check"/g).length, 4);
+    assert.match(svg, /Amber ring: remeasurement reminder/);
+    assert.match(svg, /Dashed red ring: outline check/);
+    const disabled = toSvg({ ...reviewed, outlineDirection: 'off' });
+    assert.doesNotMatch(disabled, /data-outline|data-review="outline-check"/);
+    assert.match(disabled, /data-review="reminder"/);
+  });
+
+  it('keeps descriptions in a wrapped key, escapes them, and reserves image height', () => {
+    const described = { ...doc, points: doc.points.map(point => ({ ...point, description: '<Steps> & "north" 🏊 '.repeat(5) })) };
+    const svg = toSvg(described, { width: 600 });
+    assert.match(svg, /&lt;Steps&gt; &amp; &quot;north&quot; 🏊/);
+    assert.doesNotMatch(svg, /<Steps>/);
+    const height = value => Number(value.match(/height="(\d+)"/)[1]);
+    assert.ok(height(svg) > height(toSvg(doc, { width: 600 })));
+    assertBalancedTags(svg);
+  });
 });
 
 describe('toSvg on paper', () => {
@@ -148,6 +182,28 @@ describe('toSvg on paper', () => {
     const hundred = millimetresPerUnit(toSvg(doc, { paper: 'a4', scale: 100 }));
     const fifty = millimetresPerUnit(toSvg(doc, { paper: 'a4', scale: 50 }));
     assert.ok(Math.abs(fifty / hundred - 2) < 1e-9);
+  });
+
+  it('reserves legend space when choosing a sheet scale without changing physical scale', () => {
+    const described = { ...doc, points: doc.points.map(point => ({ ...point, description: 'Steps and the long north wall beside the deep-end handrail'.repeat(2) })) };
+    const options = { paper: 'a4', orientation: 'landscape' };
+    const footer = planFooterSize(described, options);
+    assert.ok(footer > 16);
+    const predicted = fitScale(planContentSize(described), drawingArea('a4', 'landscape', { footer }));
+    const automatic = toSvg(described, options);
+    assert.equal(Number(automatic.match(/1:(\d+)/)[1]), predicted);
+    const fixed = toSvg(described, { ...options, scale: 100 });
+    assert.ok(Math.abs(millimetresPerUnit(fixed) * 200 - 40) < 0.01);
+    assert.match(fixed, /handrail/);
+  });
+
+  it('refuses a clipped fixed-scale plan and offers a fitted fallback for a long legend', () => {
+    assert.throws(() => toSvg(doc, { paper: 'a4', scale: 1 }), /do not fit this sheet/);
+    const crowded = { ...doc, points: Array.from({ length: 100 }, (_, index) => ({
+      id: String(index), label: String(index + 1), description: 'A long site description to keep with this boundary point', position: { x: 100 + index, y: 200 },
+    })), outlineDirection: 'off' };
+    assert.doesNotMatch(toSvg(crowded, { paper: 'a4' }), /width="[\d.]+mm"/);
+    assert.throws(() => toSvg(crowded, { paper: 'a4', scale: 100 }), /do not fit this sheet/);
   });
 
   it('sizes the sheet in millimetres and turns it for orientation', () => {
@@ -220,7 +276,7 @@ describe('planContentSize', () => {
     for (const annotate of [false, true]) {
       for (const paper of ['a4', 'a3', 'letter']) {
         const content = planContentSize(doc, { annotate });
-        const predicted = fitScale(content, drawingArea(paper, 'landscape'));
+        const predicted = fitScale(content, drawingArea(paper, 'landscape', { footer: planFooterSize(doc, { paper, orientation: 'landscape' }) }));
         const drawn = Number(toSvg(doc, { paper, annotate }).match(/1:(\d+)/)[1]);
         assert.equal(predicted, drawn, `${paper}${annotate ? ' annotated' : ''}`);
       }

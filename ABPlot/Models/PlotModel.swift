@@ -28,6 +28,8 @@ struct PlotPoint: Identifiable, Codable, Equatable {
     var label: String
     var note: String? = nil
     var needsRemeasure: Bool? = nil
+    /// Permanent location context, separate from temporary remeasurement notes.
+    var description: String? = nil
 }
 
 struct PlotDocument: Codable, Equatable {
