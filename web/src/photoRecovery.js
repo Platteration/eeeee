@@ -1,3 +1,16 @@
+/**
+ * Which of `records` a new copy for `project` makes surplus: that project's
+ * older copies beyond `keep`, never a protected id (the copy just written and
+ * whatever the current document points at). A record written before projects
+ * were tracked counts as its own project. Pure, so it is testable without
+ * IndexedDB.
+ */
+export function staleRecoveries(records, { project, keep, protect = [] }) {
+  const kept = new Set(protect);
+  return records.filter(record => (record.project ?? record.id) === project && !kept.has(record.id))
+    .sort((a, b) => b.updated - a.updated).slice(keep).map(record => record.id);
+}
+
 /** Photo crash recovery is independent of the small shared plot autosave. */
 export function photoRecovery(database = globalThis.indexedDB) {
   async function open() {
@@ -28,5 +41,10 @@ export function photoRecovery(database = globalThis.indexedDB) {
     list: async () => (await transact('readonly', store => store.getAll())).sort((a, b) => b.updated - a.updated),
     save: record => transact('readwrite', store => store.put(record)),
     remove: id => transact('readwrite', store => store.delete(id)),
+    prune: async options => {
+      const stale = staleRecoveries(await transact('readonly', store => store.getAll()), options);
+      if (stale.length) await transact('readwrite', store => { let request; for (const id of stale) request = store.delete(id); return request; });
+      return stale;
+    },
   };
 }

@@ -150,3 +150,25 @@ test('a failed photo recovery update retains the previous durable copy', async (
   await expect(page.locator('#photo-recovery-status')).toContainText('Could not save photo recovery');
   expect(await page.evaluate(async () => { const { photoRecovery } = await import('/src/photoRecovery.js'); return (await photoRecovery().list())[0].text; })).toBe(previous);
 });
+
+test('reopening a recovery copy prunes that project\'s older copies and keeps the current one', async ({ page }) => {
+  await openPhoto(page); await clickPhoto(page, 320, 260);
+  await expect(page.locator('#photo-recovery-status')).toContainText('recovery saved');
+  const records = () => page.evaluate(async () => { const { photoRecovery } = await import('/src/photoRecovery.js'); return (await photoRecovery().list()).map(r => ({ id: r.id, project: r.project })); });
+  const [origin] = await records();
+  page.on('dialog', dialog => dialog.accept());
+  // The recovery list is read when the photo workspace opens, so reopen it once after the first copy exists.
+  await page.locator('#photo-close').click(); await page.locator('#pool-photo-button').click();
+  for (let round = 0; round < 4; round++) {
+    await expect(page.locator('#photo-recover')).toBeEnabled();
+    const before = await page.evaluate(() => window.abplot.store.projectPhoto.recoveryId);
+    await page.locator('#photo-recovery-list').selectOption({ index: 0 }); await page.locator('#photo-recover').click();
+    await expect.poll(() => page.evaluate(() => window.abplot.store.projectPhoto.recoveryId)).not.toBe(before);
+    await expect(page.locator('#photo-recovery-status')).toContainText('recovery saved');
+  }
+  await expect.poll(async () => (await records()).length).toBe(3);
+  const remaining = await records(), current = await page.evaluate(() => window.abplot.store.projectPhoto.recoveryId);
+  expect(remaining.every(r => r.project === origin.id)).toBe(true);
+  expect(remaining.map(r => r.id)).toContain(current);
+  await expect(page.locator('#photo-recovery-list option')).toHaveCount(3);
+});
