@@ -2,7 +2,7 @@
   "name": "abplot-web",
   "version": "1.0.0",
   "private": true,
-  "description": "Browser companion to the ABPlot iOS app: sketch a plot against an A\u00e2\u20ac\u201cB baseline and read it back in real-world units.",
+  "description": "Browser companion to the ABPlot iOS app: sketch a plot against an A–B baseline and read it back in real-world units.",
   "type": "module",
   "scripts": {
     "postinstall": "node tools/prepare-ocr.js",
