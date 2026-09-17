@@ -26,6 +26,10 @@ struct PlotPoint: Identifiable, Codable, Equatable {
     let id: UUID
     var position: CGPoint
     var label: String
+    var note: String? = nil
+    var needsRemeasure: Bool? = nil
+    /// Permanent location context, separate from temporary remeasurement notes.
+    var description: String? = nil
 }
 
 struct PlotDocument: Codable, Equatable {
@@ -38,6 +42,9 @@ struct PlotDocument: Codable, Equatable {
     var points: [PlotPoint]
     /// Shared with the browser editor and retained when a plot is saved.
     var name: String? = nil
+    var baselineNote: String? = nil
+    var baselineNeedsRemeasure: Bool? = nil
+    var outlineDirection: String? = nil
 
     var abDistanceMeters: Double { abDistance * unit.toMeters }
 

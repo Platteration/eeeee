@@ -1,0 +1,8 @@
+node_modules
+vendor
+data
+test-results
+playwright-report
+.env
+
+dist

@@ -170,14 +170,21 @@ struct PlotEditorView: View {
         VStack(spacing: 10) {
             if viewModel.saveError != nil {
                 HStack {
-                    Text("Couldn’t autosave. Your latest changes are only in memory.")
+                    Text(viewModel.saveError ?? "Couldn’t autosave. Export a copy to keep your changes.")
                         .font(.caption)
                     Spacer()
-                    Button("Retry save") { viewModel.retrySaving() }
+                    Button(viewModel.recoveryRequired ? "Back up previous save" : "Retry save") {
+                        if viewModel.recoveryRequired { viewModel.preserveRecoveryAndSave() }
+                        else { viewModel.retrySaving() }
+                    }
                         .font(.caption.bold())
                 }
                 .foregroundColor(.orange)
                 .accessibilityElement(children: .contain)
+            }
+            if let recovery = viewModel.recoveryFileName {
+                Text("Previous save preserved in Files → ABPlot as \(recovery)")
+                    .font(.caption).textSelection(.enabled)
             }
             HStack {
                 Text("A–B distance")

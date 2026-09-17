@@ -2,3 +2,13 @@ xcuserdata/
 *.xcuserstate
 DerivedData/
 .DS_Store
+
+node_modules/
+playwright-report/
+test-results/
+web/vendor/
+web/data/
+.env
+*.traineddata
+
+web/dist/

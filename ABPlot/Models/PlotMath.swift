@@ -88,9 +88,10 @@ enum PlotMath {
         let ux = Double(b.x - a.x)
         let uy = Double(b.y - a.y)
         let lengthSquared = ux * ux + uy * uy
-        guard lengthSquared > Double(minCanvasABDistance * minCanvasABDistance) else { return nil }
+        guard lengthSquared.isFinite, lengthSquared > Double(minCanvasABDistance * minCanvasABDistance) else { return nil }
         let s = (dx * ux + dy * uy) / lengthSquared
         let t = (dx * -uy + dy * ux) / lengthSquared
+        guard s.isFinite, t.isFinite else { return nil }
         return (s, t)
     }
 

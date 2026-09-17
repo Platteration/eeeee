@@ -1,0 +1,26 @@
+{
+  "name": "abplot-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser companion to the ABPlot iOS app: sketch a plot against an A\u00e2\u20ac\u201cB baseline and read it back in real-world units.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node tools/prepare-ocr.js",
+    "build:ocr": "node tools/prepare-ocr.js",
+    "start": "node tools/serve.js",
+    "test": "node --test test/*.test.js",
+    "test:browser": "playwright test",
+    "build": "node tools/prepare-ocr.js && node tools/build-static.js",
+    "smoke": "node tools/smoke.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "7.0.0"
+  }
+}

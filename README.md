@@ -6,8 +6,13 @@ of points on a 2D canvas relative to a baseline between two reference points
 reality: tap the real-world spots of A and B on a detected surface and the app
 overlays every plotted point at the correct position, scale, and orientation.
 
-Built with SwiftUI, ARKit, and RealityKit. No third-party dependencies.
-iOS 16+, iPhone only.
+The iOS app uses SwiftUI, ARKit, and RealityKit with no third-party dependencies.
+iOS 16+, iPhone only. The browser companion lives in `web/` and includes local
+OCR and pool photo overlays. See [HANDOFF.md](HANDOFF.md) for the combined branch
+and development checklist.
+
+For deployment artifacts, verification, rollback and iOS release prerequisites,
+see [RELEASE.md](RELEASE.md).
 
 ## How it works
 
@@ -71,7 +76,15 @@ iOS 16+, iPhone only.
 - Numeric fields use a decimal point, regardless of the phone's locale. Import
   the file as comma-separated data if your spreadsheet expects a different delimiter.
 
-### 2. AR mode
+### 2. Moving plots on and off the phone
+The app keeps its plot in `plot.json` in its Documents folder, which is exposed
+to the Files app (under *On My iPhone → ABPlot*). Copy that file out to keep or
+share a plot, or drop one in — replacing `plot.json` and relaunching the app
+loads it. The web companion in `web/` reads and writes exactly this file.
+For normal transfers, use **Plot files & name** to preview and validate an import
+before replacing your current plot; it also supports Undo.
+
+### 3. AR mode
 - Tap **View in AR** (enabled once you have at least one point and a valid
   distance).
 - Scan a flat horizontal surface. Once a surface is found, a yellow **reticle**
@@ -101,6 +114,26 @@ placement accuracy. If the rendered B marker isn't exactly where you placed it,
 that's this feedback, not a bug — the target ring is there to make matching the
 declared scale easy when you want it.
 
+## Web companion
+
+`web/` holds a browser version of the plot editor: the same A–B geometry, the
+same `plot.json`, plus the measurement table, CSV export, and plans printable
+at a true scale (1:100 on A4, and so on) that a mouse and a big screen make
+easy. It has no AR mode — draw and check the
+plot there, export the JSON, and open it here to place it. See
+[`web/README.md`](web/README.md).
+
+```sh
+cd web
+npm ci               # Node 22 or 24; prepares local OCR assets
+npm start            # http://localhost:8000
+```
+
+**Pool photo overlay** in the browser supports matching existing points or
+clicking a photo and entering A/B measurements. Photo projects save the image
+and matches separately from the standard iOS-compatible plot JSON. Details and
+perspective limitations are in [web/README.md](web/README.md#pool-photo-overlays).
+
 ## Building
 
 1. Open `ABPlot.xcodeproj` in **Xcode 16 or newer**.
@@ -114,13 +147,14 @@ declared scale easy when you want it.
    on the phone under Settings → General → VPN & Device Management.
 4. Run.
 
-The app icon set is intentionally empty (builds with a warning). To add one,
-drop a 1024×1024 PNG into `ABPlot/Assets.xcassets/AppIcon.appiconset/` and
-reference it in that folder's `Contents.json`.
+The app includes an opaque 1024px A/B icon. Its editable vector source is
+`design/ABPlotIcon.svg`; the iOS asset lives in
+`ABPlot/Assets.xcassets/AppIcon.appiconset/`.
 
 ## Project layout
 
 ```
+web/                    Browser companion app (see web/README.md)
 ABPlot.xcodeproj/       Xcode 16 project (filesystem-synchronized group)
 Config/Info.plist       App Info.plist (camera usage, ARKit requirement)
 project.yml             XcodeGen fallback spec
