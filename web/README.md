@@ -19,6 +19,11 @@ npm test           # pure Node unit tests
 ```
 
 Use an HTTP server, not a file:// URL: browser ES modules require an HTTP origin.
+Opening the dev server from a phone on the same network (`http://<computer-ip>:8000`)
+is a plain-HTTP origin, and browsers provide the lock manager only on secure origins
+(HTTPS, or `localhost` on the machine itself). Autosave still writes there, and the
+header keeps a warning that cross-tab conflict protection is off: edit a plot in one
+tab at a time on such an origin, or serve over HTTPS for the protected version.
 The included server supports optional online OCR; a static host supports manual
 entry, photo matching and local OCR without service credentials.
 
@@ -158,6 +163,9 @@ Autosave checks browser locks and the previously read save before writing. If
 another tab saved a different plot, autosave pauses and offers its latest save or
 a download of your own version. Blocked storage leaves file export available.
 An unreadable previous plot stays downloadable until replacement succeeds.
+Without a lock manager (plain HTTP away from localhost) autosave still writes,
+with the warning described under Run locally, and only the previously-read check
+remains. Leaving or hiding the page writes any save still waiting for its lock.
 
 The **Export** dialog contains:
 

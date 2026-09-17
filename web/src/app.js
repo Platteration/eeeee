@@ -402,8 +402,11 @@ function scheduleTableRender() {
 function render() {
   const doc = store.document;
   const photoSave = photoPanel?.recoveryStatus;
-  ui.saveStatus.textContent = store.saveError ?? (photoSave?.state === 'error' ? photoSave.message : store.isSaving || photoSave?.state === 'saving' ? 'Saving browser recovery…' : store.isEditing ? 'Editing… saves when you release.' : photoPanel?.photo && photoSave?.state !== 'saved' ? 'Photo recovery pending. Save project for a portable copy.' : store.hasSaved ? 'Saved in this browser · Save project for a portable copy.' : 'Ready · Save project for a portable copy.');
-  ui.saveStatus.dataset.tone = store.saveError || photoSave?.state === 'error' ? 'error' : 'ok';
+  const failure = store.saveError ?? (photoSave?.state === 'error' ? photoSave.message : null);
+  ui.saveStatus.textContent = failure ?? (store.isSaving || photoSave?.state === 'saving' ? 'Saving browser recovery…' : store.isEditing ? 'Editing… saves when you release.' : photoPanel?.photo && photoSave?.state !== 'saved' ? 'Photo recovery pending. Save project for a portable copy.' : store.hasSaved ? 'Saved in this browser · Save project for a portable copy.' : 'Ready · Save project for a portable copy.');
+  // Advice, not a failure: it stays beside every ordinary status for as long as the origin lacks a lock manager.
+  if (!failure && store.saveWarning) ui.saveStatus.textContent += ` ${store.saveWarning}`;
+  ui.saveStatus.dataset.tone = failure ? 'error' : 'ok';
   ui.retrySave.hidden = !store.saveError;
   ui.retrySave.textContent = store.hasConflict ? 'Load latest save…' : store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
   ui.recovery.hidden = store.recoveryText === null;
@@ -763,6 +766,11 @@ $('export-close').addEventListener('click', () => $('export-options').close());
 $('export-options').addEventListener('keydown', event => event.stopPropagation());
 $('print-field-sheet').addEventListener('click', () => runExport($('print-field-sheet'), () => printFieldSheet(store.document)));
 window.addEventListener('beforeunload', event => { if (baselineDirty || quickEntry.hasDraft || reviewPanel.hasDraft) { event.preventDefault(); event.returnValue = ''; } });
+// Saves queue behind the lock manager, and a page being discarded may never run
+// them. The editor registered its own pagehide/visibilitychange listeners first,
+// so an in-progress drag is already committed by the time these flush it.
+window.addEventListener('pagehide', () => store.flush());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') store.flush(); });
 previewBaseline(); render();
 
 function updateTypingLayout() {
