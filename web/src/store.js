@@ -77,7 +77,16 @@ export class Store {
   }
 
   get saveError() {
-    return this.#saveError ?? this.#loadError ?? (!this.#storage ? 'Browser storage is unavailable. Export JSON to keep your work.' : this.#locks === null ? 'Safe autosave is unavailable in this browser. Export JSON to keep your work.' : null);
+    return this.#saveError ?? this.#loadError ?? (!this.#storage ? 'Browser storage is unavailable. Export JSON to keep your work.' : null);
+  }
+
+  /**
+   * Advice that stays visible beside the ordinary save status: autosave still
+   * writes without a lock manager, but two tabs saving at once are no longer
+   * serialised (only the last-read check in #save remains).
+   */
+  get saveWarning() {
+    return this.#storage && this.#locks === null ? 'Cross-tab conflict protection is off: this page is not a secure origin (HTTPS or localhost), so the browser lock manager is unavailable. Autosave still writes; edit this plot in one tab at a time.' : null;
   }
 
   get revision() { return this.#revision; }
@@ -85,6 +94,26 @@ export class Store {
   get hasConflict() { return this.#conflict; }
   get isSaving() { return this.#saving > 0; }
   whenSaved() { return this.#queue; }
+
+  /**
+   * Best-effort synchronous write for pagehide / visibilitychange. A save
+   * queued behind the lock manager may never run in a page being discarded,
+   * so store the latest document directly, under the same last-read check.
+   * The queued write then finds its own text already stored and is harmless.
+   * Returns whether the latest document is now stored.
+   */
+  flush() {
+    if (this.#saving === 0 || !this.#storage || this.#conflict || this.#loadError) return false;
+    try {
+      if ((this.#storage.getItem(STORAGE_KEY) ?? null) !== this.#expected) return false;
+      const text = JSON.stringify(this.#doc);
+      if (text === this.#expected) return true;
+      this.#storage.setItem(STORAGE_KEY, text);
+      this.#expected = text;
+      this.#hasSaved = true;
+      return true;
+    } catch { return false; }
+  }
 
   loadLatest() {
     const saved = this.#storage?.getItem(STORAGE_KEY) ?? null;
@@ -259,7 +288,7 @@ export class Store {
   }
 
   #save(replaceUnreadable = false) {
-    if (!this.#storage || this.#locks === null || this.#conflict || (this.#loadError && !replaceUnreadable)) return;
+    if (!this.#storage || this.#conflict || (this.#loadError && !replaceUnreadable)) return;
     const text = JSON.stringify(this.#doc);
     const epoch = this.#epoch;
     const persist = () => {
@@ -284,9 +313,12 @@ export class Store {
         this.#saveError = 'Could not autosave. Your latest changes are only in memory. Retry saving or export JSON.';
       } finally { this.#changed(false); }
     };
-    // Undefined is the synchronous test/non-browser adapter. Browser callers
-    // explicitly supply LockManager or null; they never use an unsafe fallback.
-    if (this.#locks === undefined) return persist();
+    // Undefined is the synchronous test/non-browser adapter. Null is a browser
+    // without a lock manager: navigator.locks exists only in secure contexts,
+    // so plain http:// from a phone on the LAN has none. Write directly rather
+    // than not at all (see saveWarning); the last-read check in persist still
+    // catches a save another tab finished before this one started.
+    if (this.#locks === undefined || this.#locks === null) return persist();
     this.#saving++;
     this.#queue = this.#queue.then(() => this.#locks.request(STORAGE_KEY, persist)).catch(() => {
       this.#saveError = 'Could not acquire the save lock. Retry saving or export JSON.';

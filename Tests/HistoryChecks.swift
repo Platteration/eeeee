@@ -109,6 +109,38 @@ struct HistoryChecks {
         while bounded.canRedo { bounded.redo(); redoCount += 1 }
         precondition(redoCount == 100 && bounded.doc.abDistance == 107)
 
+        // Typing a plot name is one undo step, as in the web editor, so a long
+        // name (159 keystrokes here) cannot evict geometry edits from the
+        // bounded history.
+        let namingURL = directory.appendingPathComponent("naming.json")
+        let naming = PlotViewModel(saveURL: namingURL)
+        naming.addPoint(at: CGPoint(x: 10, y: 10))
+        let unnamed = naming.doc
+        let typing = UUID()
+        var typed = ""
+        for _ in 0..<80 { typed += "p"; naming.setName(typed, historyGroup: typing) }
+        for _ in 0..<79 { typed.removeLast(); naming.setName(typed, historyGroup: typing) }
+        precondition(naming.doc.name == "p" && !naming.canRedo)
+        naming.undo()
+        precondition(naming.doc == unnamed && naming.canUndo)
+        naming.undo()
+        precondition(naming.doc.points.isEmpty && !naming.canUndo)
+        naming.redo()
+        naming.redo()
+        precondition(naming.doc.name == "p" && naming.doc.points.count == 1)
+        // A commit without a group ends it; a new session starts a new step.
+        naming.setName("p")
+        naming.setName("pool", historyGroup: UUID())
+        naming.undo()
+        precondition(naming.doc.name == "p")
+        naming.redo()
+        // Any other edit also ends the group, even for the same token.
+        naming.setDistance(9)
+        naming.setName("pool house", historyGroup: typing)
+        naming.undo()
+        precondition(naming.doc.name == "pool" && naming.doc.abDistance == 9)
+        precondition(PlotViewModel(saveURL: namingURL).doc.name == "pool")
+
         let fitting = PlotViewModel(saveURL: directory.appendingPathComponent("fit.json"))
         fitting.moveA(to: CGPoint(x: -400, y: 800))
         fitting.moveB(to: CGPoint(x: 100, y: 1200))
@@ -231,6 +263,6 @@ struct HistoryChecks {
         precondition(PlotMath.referenceDistances(of: origin, in: measured) == nil)
         measured.abDistance = 4
         precondition(PlotMath.referenceDistances(of: CGPoint(x: CGFloat.infinity, y: 0), in: measured) == nil)
-        print("Editor checks passed: history, fit/export, drag offsets, clamping, and reference-distance readouts")
+        print("Editor checks passed: history, grouped naming, fit/export, drag offsets, clamping, and reference-distance readouts")
     }
 }

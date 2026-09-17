@@ -40,6 +40,14 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
   let recoveryStatus = { state: 'none', message: '' }, guard = beforeReplace;
   const reads = new LatestOperation(), recovery = photoRecovery();
   let recoveryTimer, recoveryWork = Promise.resolve(), recoveryRecords = [], recoveryGeneration = 0;
+  // Every attach and every opened copy mints a fresh record (tabs must not share
+  // one), and each record holds a base64 PNG. Records therefore carry the project
+  // they continue, so writing a new copy can prune that project's older ones.
+  // Reopening a recovery copy continues its project, replacing the photo of an
+  // open project continues that project, and a file from disk starts a new one.
+  const RECOVERY_KEEP = 2, lineage = new Map(), writtenRecords = new Set();
+  const projectOf = id => lineage.get(id) ?? id;
+  function mintRecovery(project = null) { const id = crypto.randomUUID(); lineage.set(id, project ?? id); return id; }
   const note = text => { $('status').textContent = text; };
   function setRecoveryStatus(next) { recoveryStatus = next; $('recovery-status').textContent = next.message; onRecoveryStatus(next); }
   async function listRecoveries() {
@@ -52,10 +60,15 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
   function persistSnapshot(doc, snapshot) {
     if (!snapshot) return recoveryWork;
     const generation = ++recoveryGeneration, id = snapshot.recoveryId;
-    const record = { id, name: doc.name || snapshot.asset.name, updated: Date.now(), text: serializePhotoProject(doc, photoFromState(snapshot)) };
+    const record = { id, project: projectOf(id), name: doc.name || snapshot.asset.name, updated: Date.now(), text: serializePhotoProject(doc, photoFromState(snapshot)) };
     if (id === store.projectPhoto?.recoveryId) setRecoveryStatus({ state: 'saving', message: 'Saving project recovery on this browser…' });
     recoveryWork = recoveryWork.then(() => recovery.save(record)).then(() => {
       if (generation === recoveryGeneration && id === store.projectPhoto?.recoveryId) setRecoveryStatus({ state: 'saved', message: 'Plot and photo recovery saved on this browser. Save project downloads a portable copy.' });
+      // Prune only after the durable first write of a new copy, and never the
+      // copy the document points at now (Undo may have returned to an older one).
+      if (writtenRecords.has(id)) return;
+      writtenRecords.add(id);
+      return recovery.prune({ project: record.project, keep: RECOVERY_KEEP, protect: [id, store.projectPhoto?.recoveryId] }).then(stale => { if (stale.length) void listRecoveries(); }, () => {});
     }).catch(() => {
       if (generation === recoveryGeneration && id === store.projectPhoto?.recoveryId) setRecoveryStatus({ state: 'error', message: 'Could not save photo recovery. The last saved copy is kept. Save project now.' });
     });
@@ -73,7 +86,7 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
   }
   $('recover').addEventListener('click', async () => {
     const record = recoveryRecords.find(item => item.id === $('recovery-list').value); if (!record) return;
-    try { await openProject(new File([record.text], 'browser-recovery.json', { type: 'application/json' })); } catch (error) { note(error.message); }
+    try { await openProject(new File([record.text], 'browser-recovery.json', { type: 'application/json' }), { recoveryProject: record.project ?? record.id }); } catch (error) { note(error.message); }
   });
   $('delete-recovery').addEventListener('click', async () => {
     const id = $('recovery-list').value;
@@ -266,7 +279,7 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
       bitmap = await loadPhoto(file); const blob = await preparePhoto(bitmap); prepared = await createImageBitmap(blob); const dataUrl = await imageData(blob);
       if (!current()) return;
       if (store.revision !== revision) throw Error('The project changed while the photo was loading. Choose the photo again when ready.');
-      const next = photoState({ name: file.name, dataUrl, width: prepared.width, height: prepared.height, pins: {}, settings: photoSettings() }, crypto.randomUUID());
+      const next = photoState({ name: file.name, dataUrl, width: prepared.width, height: prepared.height, pins: {}, settings: photoSettings() }, mintRecovery(store.projectPhoto ? projectOf(store.projectPhoto.recoveryId) : null));
       store.applyProject(project => { project.photo = next; }); selected = 'A'; resetDraft(); $('tool').value = 'select'; fit();
       note('Photo ready. Choose Match to place points, or Select to inspect existing marks. A and B are optional if they are outside the photo.');
     } catch (error) { if (current()) note(error.message); }
@@ -278,7 +291,7 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
     cancelOpen(); store.applyProject(project => { project.document = structuredClone(doc); project.photo = null; });
     selected = 'A'; resetDraft(); dirty = false; editor.fit(); return true;
   }
-  async function openProject(file) {
+  async function openProject(file, { recoveryProject = null } = {}) {
     if (!file) return false;
     const current = reads.start(), revision = store.revision; loading = true;
     let bitmap;
@@ -296,7 +309,7 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
       if (store.revision !== revision) throw Error('The project changed while loading. Open the file again when ready.');
       if (!guard()) return false;
       discardDrafts();
-      store.applyProject(draft => { draft.document = project.document; draft.photo = photoState(project.photo, crypto.randomUUID()); });
+      store.applyProject(draft => { draft.document = project.document; draft.photo = project.photo ? photoState(project.photo, mintRecovery(recoveryProject)) : null; });
       selected = 'A'; resetDraft(); dirty = false; editor.fit();
       if (photo) { open(); fit(); } else if (!workspace.hidden) close();
       $('save-note').textContent = 'Project opened. Save project downloads a new copy after your edits.'; note(`Opened ${file.name}. Undo restores the previous project.`); return true;

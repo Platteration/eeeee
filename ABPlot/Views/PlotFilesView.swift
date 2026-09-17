@@ -20,6 +20,8 @@ struct PlotFilesView: View {
     @EnvironmentObject private var viewModel: PlotViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
+    /// One token per presentation of this sheet: typing the name is one undo step.
+    @State private var nameHistoryGroup = UUID()
     @State private var importing = false
     @State private var exporting = false
     @State private var exportFile = PlotJSONFile(data: Data())
@@ -37,7 +39,7 @@ struct PlotFilesView: View {
                 Section("Current plot") {
                     TextField("Plot name", text: $name)
                         .onSubmit { viewModel.setName(name) }
-                        .onChange(of: name) { viewModel.setName($0) }
+                        .onChange(of: name) { viewModel.setName($0, historyGroup: nameHistoryGroup) }
                     Text("\(viewModel.doc.points.count) points · A–B \(viewModel.doc.abDistance, format: .number) \(viewModel.doc.unit.symbol)")
                         .foregroundStyle(.secondary)
                     Button("Save JSON to Files…", systemImage: "square.and.arrow.up") {

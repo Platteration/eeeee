@@ -21,6 +21,9 @@ final class PlotViewModel: ObservableObject {
     @Published private var undoHistory: [Snapshot] = []
     @Published private var redoHistory: [Snapshot] = []
     private let historyLimit = 100
+    /// Consecutive saves sharing a token (typing a name) extend one undo step
+    /// instead of adding one per keystroke, as the web editor groups input.
+    private var historyGroup: UUID?
 
     init(saveURL: URL? = nil) {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -48,6 +51,7 @@ final class PlotViewModel: ObservableObject {
 
     func undo() {
         save() // Finish any in-flight drag before navigating history.
+        historyGroup = nil
         guard let previous = undoHistory.popLast() else { return }
         redoHistory.append(savedSnapshot)
         restore(previous)
@@ -55,6 +59,7 @@ final class PlotViewModel: ObservableObject {
 
     func redo() {
         save()
+        historyGroup = nil
         guard let next = redoHistory.popLast() else { return }
         undoHistory.append(savedSnapshot)
         restore(next)
@@ -125,6 +130,18 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
+    /// Scanned or typed measurements replace the geometry only. The plot's name
+    /// and its review metadata from the web editor have no native UI yet, so a
+    /// replacement built from a table must not silently drop them.
+    func replaceMeasurements(with document: PlotDocument) {
+        var replacement = document
+        replacement.name = doc.name
+        replacement.baselineNote = doc.baselineNote
+        replacement.baselineNeedsRemeasure = doc.baselineNeedsRemeasure
+        replacement.outlineDirection = doc.outlineDirection
+        importMeasurements(replacement)
+    }
+
     private static func nextLabel(in document: PlotDocument) -> Int {
         let highest = document.points.compactMap { Int($0.label) }.filter { $0 > 0 }.max() ?? 0
         if highest < Int.max { return highest + 1 }
@@ -134,10 +151,12 @@ final class PlotViewModel: ObservableObject {
         return candidate
     }
 
-    func setName(_ name: String) {
+    /// Pass the same `historyGroup` for every keystroke of one editing session
+    /// so the whole name is one undo step; pass nil to commit and end the group.
+    func setName(_ name: String, historyGroup: UUID? = nil) {
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
         doc.name = trimmed.isEmpty ? nil : trimmed
-        save()
+        save(historyGroup: historyGroup)
     }
 
     /// Never overwrite an unreadable autosave until its bytes have a durable copy.
@@ -226,17 +245,21 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
-    private func save() {
+    private func save(historyGroup group: UUID? = nil) {
         let current = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
         guard current != savedSnapshot else {
+            if group != historyGroup { historyGroup = nil }
             if saveError != nil { persist() }
             return
         }
-        undoHistory.append(savedSnapshot)
-        if undoHistory.count > historyLimit {
-            undoHistory.removeFirst(undoHistory.count - historyLimit)
+        if group == nil || group != historyGroup {
+            undoHistory.append(savedSnapshot)
+            if undoHistory.count > historyLimit {
+                undoHistory.removeFirst(undoHistory.count - historyLimit)
+            }
         }
         redoHistory.removeAll()
+        historyGroup = group
         savedSnapshot = current
         persist()
     }

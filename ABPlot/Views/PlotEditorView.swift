@@ -50,7 +50,7 @@ struct PlotEditorView: View {
         .sheet(isPresented: $showingMeasurementImport) {
             MeasurementImportView(canvasSize: canvasSize,
                                   initialDistance: viewModel.doc.abDistance, initialUnit: viewModel.doc.unit) {
-                viewModel.importMeasurements($0)
+                viewModel.replaceMeasurements(with: $0)
             }
         }
         .fileExporter(isPresented: $showingExport, document: exportFile,

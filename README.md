@@ -39,9 +39,10 @@ see [RELEASE.md](RELEASE.md).
   to your finger. Tap a plotted point to see its distances from A and B in the
   selected unit; these update as you move the selected point or either reference.
 - **Undo** and **Redo** recover point additions, deletions, whole drags, clearing,
-  and distance/unit edits. External keyboards support Command-Z and
-  Shift-Command-Z. The last 100 edits are available during the current session;
-  the restored plot autosaves, but history starts fresh on relaunch.
+  distance/unit edits, and naming (a typed name is one step). External keyboards
+  support Command-Z and Shift-Command-Z. The last 100 edits are available during
+  the current session; the restored plot autosaves, but history starts fresh on
+  relaunch.
 
 ### Scan measurement tables (OCR)
 - Choose **Plot options → Scan measurements**, then take a photo or select an
@@ -58,7 +59,8 @@ see [RELEASE.md](RELEASE.md).
   numbers. Spaces, commas, and semicolons can separate columns; decimal commas
   require spaces or semicolons between columns. A and B are reserved labels.
 - Check the point preview, then **Use measurements → Replace plot**. Import
-  replaces the current plot in one undoable, autosaved edit. Invalid rows or
+  replaces the current plot in one undoable, autosaved edit; the plot's name and
+  any review notes saved from the web editor are kept. Invalid rows or
   impossible A/B distance pairs block import. Up to 500 points are supported.
 - Clear printed tables work best. Handwriting, skewed tables, and annotated
   sketches may need manual correction; this does not infer geometry from a drawing.

@@ -70,6 +70,26 @@ struct ImportChecks {
         precondition(model.doc == imported)
         model.addPoint(at: .zero)
         precondition(model.doc.points.last?.label == "3")
-        print("Import checks passed: parsing, triangle geometry, mirrored sides, offsets, validation, persistence, and undo")
+
+        // Scanning measurements replaces the geometry only: the plot's name and
+        // the review metadata saved from the web editor must survive.
+        let namedURL = FileManager.default.temporaryDirectory.appendingPathComponent("ABPlot-import-named-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: namedURL) }
+        let named = PlotViewModel(saveURL: namedURL)
+        var reviewed = named.doc
+        reviewed.name = "North pool"
+        reviewed.baselineNote = "Tape sagged at B"
+        reviewed.baselineNeedsRemeasure = true
+        reviewed.outlineDirection = "clockwise"
+        named.importMeasurements(reviewed)
+        named.replaceMeasurements(with: imported)
+        precondition(named.doc.name == "North pool" && named.doc.baselineNote == "Tape sagged at B")
+        precondition(named.doc.baselineNeedsRemeasure == true && named.doc.outlineDirection == "clockwise")
+        precondition(named.doc.points == imported.points && named.doc.unit == imported.unit)
+        precondition(named.doc.abDistance == imported.abDistance && named.doc.pointA == imported.pointA && named.doc.pointB == imported.pointB)
+        precondition(PlotViewModel(saveURL: namedURL).doc.name == "North pool")
+        named.undo()
+        precondition(named.doc == reviewed)
+        print("Import checks passed: parsing, triangle geometry, mirrored sides, offsets, validation, persistence, kept metadata, and undo")
     }
 }

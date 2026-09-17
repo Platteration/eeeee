@@ -47,11 +47,20 @@ test('concurrent locked saves preserve first writer and surface the stale tab', 
   assert.equal(second.hasConflict, true); assert.equal(second.document.abDistance, 7);
   second.loadLatest(); assert.equal(second.document.name, 'First tab'); assert.equal(second.hasConflict, false);
 });
-test('a browser without locking keeps edits exportable and does not write', () => {
+test('a browser without a lock manager still autosaves and warns that tabs are unprotected', () => {
   const disk = storage(), store = Store.fromStorage(disk, { locks: null });
-  store.apply(d => { d.name = 'Unsaved'; });
-  assert.equal(disk.getItem(), null); assert.match(store.saveError, /Safe autosave/);
-  assert.equal(parseDocument(serializeDocument(store.document)).name, 'Unsaved');
+  store.apply(d => { d.name = 'Plain HTTP'; });
+  assert.equal(JSON.parse(disk.getItem()).name, 'Plain HTTP');
+  assert.equal(store.saveError, null); assert.equal(store.hasSaved, true);
+  assert.match(store.saveWarning, /not a secure origin/); assert.match(store.saveWarning, /one tab/);
+  assert.equal(Store.fromStorage(disk, { locks: null }).document.name, 'Plain HTTP');
+  // The last-read check survives without the lock: a save another tab finished first is not overwritten.
+  disk.setItem(STORAGE_KEY, JSON.stringify({ ...defaultDocument(), name: 'Other tab' }));
+  store.apply(d => { d.abDistance = 9; });
+  assert.equal(JSON.parse(disk.getItem()).name, 'Other tab'); assert.equal(store.hasConflict, true);
+  assert.equal(parseDocument(serializeDocument(store.document)).abDistance, 9);
+  assert.equal(new Store({ storage: disk, locks: { request() {} } }).saveWarning, null);
+  assert.equal(new Store({ storage: null, locks: null }).saveWarning, null);
 });
 test('malformed preferences are individually defaulted', () => {
   for (const raw of ['null', '[]', '{', '{"sheet":12,"planScale":{},"annotateExports":"yes"}', '{"sheet":"bogus"}']) {
@@ -72,6 +81,31 @@ test('huge grid indices terminate without unsafe integer loops', () => {
   assert.equal(abGrid(defaultDocument(), { x: 1e30, y: 1e30, w: 100, h: 100 }, 40), null);
 });
 
+test('leaving the page flushes a save still waiting for the lock', async () => {
+  const disk = storage(); let release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const locks = { request: async (_, action) => { entered(); await new Promise(resolve => { release = resolve; }); return action(); } };
+  const store = Store.fromStorage(disk, { locks });
+  assert.equal(store.flush(), false); assert.equal(disk.getItem(), null);
+  store.apply(d => { d.name = 'Leaving'; }); await started;
+  assert.equal(disk.getItem(), null); assert.equal(store.isSaving, true);
+  assert.equal(store.flush(), true);
+  assert.equal(JSON.parse(disk.getItem()).name, 'Leaving'); assert.equal(store.hasSaved, true);
+  release(); await store.whenSaved();
+  assert.equal(store.hasConflict, false); assert.equal(store.isSaving, false); assert.equal(store.saveError, null);
+  assert.equal(JSON.parse(disk.getItem()).name, 'Leaving');
+});
+test('the unload flush never overwrites a save another tab finished first', async () => {
+  const disk = storage(); let release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const locks = { request: async (_, action) => { entered(); await new Promise(resolve => { release = resolve; }); return action(); } };
+  const store = Store.fromStorage(disk, { locks });
+  store.apply(d => { d.name = 'Mine'; }); await started;
+  const theirs = JSON.stringify({ ...defaultDocument(), name: 'Theirs' }); disk.setItem(STORAGE_KEY, theirs);
+  assert.equal(store.flush(), false); assert.equal(disk.getItem(), theirs);
+  release(); await store.whenSaved();
+  assert.equal(store.hasConflict, true); assert.equal(disk.getItem(), theirs);
+});
 test('edits during a locked recovery replacement are subsequently saved', async () => {
   const disk = storage('{broken'); let release, entered;
   const started = new Promise(resolve => { entered = resolve; });
