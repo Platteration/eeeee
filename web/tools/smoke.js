@@ -8,7 +8,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
-const PUBLIC = [['', 'text/html'], ['src/app.js', 'javascript'], ['styles.css', 'text/css'], ['privacy.html', 'text/html'], ['vendor/ocr/tesseract.esm.min.js', 'javascript']];
+const PUBLIC = [['', 'text/html'], ['src/app.js', 'javascript'], ['styles.css', 'text/css'], ['privacy.html', 'text/html'], ['vendor/ocr/tesseract.esm.min.js', 'javascript'], ['manifest.webmanifest', 'json'], ['sw.js', 'javascript'], ['icons/abplot-192.png', 'image/png']];
 const PRIVATE = ['server/ocr-api.js', '.env', 'package.json'];
 
 /** Normalize a site URL so relative paths resolve inside it: the path always ends with `/`. */

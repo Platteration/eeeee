@@ -24,6 +24,7 @@ const TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.wasm': 'application/wasm',
+  '.webmanifest': 'application/manifest+json',
 };
 
 /**
@@ -64,7 +65,7 @@ const server = createServer(async (request, response) => {
   try {
     if (!target) throw new Error('outside root');
     const relative = target.slice(root.length + 1).split(sep).join('/');
-    if (!['index.html', 'styles.css', 'privacy.html'].includes(relative) && !relative.startsWith('src/') && !relative.startsWith('vendor/')) {
+    if (!['index.html', 'styles.css', 'privacy.html', 'manifest.webmanifest', 'sw.js'].includes(relative) && !['src/', 'vendor/', 'icons/'].some(prefix => relative.startsWith(prefix))) {
       response.writeHead(404); response.end('Not found'); return;
     }
     const info = await stat(target);

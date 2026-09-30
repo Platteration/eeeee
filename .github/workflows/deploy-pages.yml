@@ -33,6 +33,9 @@ jobs:
           test -f dist/index.html
           test -f dist/vendor/ocr/lang/eng.traineddata.gz
           test -f dist/privacy.html
+          test -f dist/manifest.webmanifest
+          test -f dist/sw.js
+          test -f dist/icons/abplot-512.png
           test ! -e dist/server
           test ! -e dist/node_modules
           test ! -e dist/.env
