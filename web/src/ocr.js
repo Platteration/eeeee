@@ -8,12 +8,24 @@ export async function loadPhoto(file) {
   return bitmap;
 }
 
+export const MAX_PREPARED_PIXELS = 4000000, MAX_PREPARED_SIDE = 4000;
+
+/**
+ * Integer output size for a prepared image. Both sides are floored, never rounded:
+ * rounding put common sizes just over the pixel budget (3840×2160 became 2667×1500 =
+ * 4,000,500), and a project saved with such a photo could not be opened again.
+ * With scale ≤ min(1, √(budget / area), side / longest), floor(w·s)·floor(h·s) ≤ w·h·s² ≤ budget.
+ */
+export function preparedSize(width, height, scale = 1) {
+  return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
+}
+
 export async function preparePhoto(bitmap, { rotation = 0, left = 0, top = 0, right = 0, bottom = 0 } = {}) {
   if (![left, top, right, bottom].every(n => Number.isFinite(n) && n >= 0 && n < 100) || left + right >= 100 || top + bottom >= 100) throw new Error('Crop must leave some of the image visible.');
   const sourceWidth = bitmap.width * (1 - (left + right) / 100), sourceHeight = bitmap.height * (1 - (top + bottom) / 100);
-  let scale = Math.min(1, Math.sqrt(4000000 / (sourceWidth * sourceHeight)), 4000 / Math.max(sourceWidth, sourceHeight));
+  let scale = Math.min(1, Math.sqrt(MAX_PREPARED_PIXELS / (sourceWidth * sourceHeight)), MAX_PREPARED_SIDE / Math.max(sourceWidth, sourceHeight));
   for (let attempt = 0; attempt < 5; attempt++, scale *= 0.75) {
-    const width = Math.max(1, Math.round(sourceWidth * scale)), height = Math.max(1, Math.round(sourceHeight * scale));
+    const { width, height } = preparedSize(sourceWidth, sourceHeight, scale);
     const canvas = document.createElement('canvas');
     canvas.width = rotation % 180 ? height : width; canvas.height = rotation % 180 ? width : height;
     const context = canvas.getContext('2d'); if (!context) throw new Error('Image processing is unavailable in this browser.');

@@ -36,3 +36,12 @@ test('photo project validation rejects unsafe image types and out-of-image match
   p.dataUrl = 'data:image/png;base64,AAAA'; p.pins.A = { x: Infinity, y: 0 };
   assert.throws(() => parsePhotoProject(serializePhotoProject(doc, p)), /outside the image/);
 });
+
+test('photo projects written by earlier builds with half-pixel rounding still open, larger photos do not', () => {
+  const doc = defaultDocument();
+  const project = size => JSON.stringify({ format: 'abplot-photo-project', version: 1, document: JSON.parse(serializeDocument(doc)), photo: { ...photo(), ...size } });
+  assert.equal(parsePhotoProject(project({ width: 2667, height: 1500 })).photo.width, 2667); // 3840×2160 prepared by the rounding build: 4,000,500 px
+  assert.equal(parsePhotoProject(project({ width: 2000, height: 2000 })).photo.height, 2000);
+  assert.throws(() => parsePhotoProject(project({ width: 2100, height: 2000 })), /dimensions/);
+  assert.throws(() => parsePhotoProject(project({ width: 4001, height: 10 })), /dimensions/);
+});

@@ -213,3 +213,59 @@ test('review drafts for deleted points or an unchanged name do not block leaving
   await expect(page.locator('#measurements tbody tr')).toHaveCount(2);
   expect(await wouldPrompt(page)).toBe(false);
 });
+
+async function attachPhoto(page, width, height) {
+  const image = await page.evaluate(([w, h]) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#6b8263'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#148cbd'; ctx.fillRect(w * 0.2, h * 0.3, w * 0.6, h * 0.4);
+    return c.toDataURL().split(',')[1];
+  }, [width, height]);
+  await page.locator('#pool-photo-button').click();
+  await page.locator('#photo-file').setInputFiles({ name: 'pool.png', mimeType: 'image/png', buffer: Buffer.from(image, 'base64') });
+  await expect(page.locator('#photo-workspace')).toBeVisible();
+  await page.locator('#pool-photo details').evaluateAll(items => items.forEach(el => { el.open = true; }));
+}
+const photoSize = page => page.evaluate(() => { const { width, height } = window.abplot.store.projectPhoto.asset; return { width, height }; });
+async function matchAt(page, x, y) {
+  const canvas = page.locator('#photo-canvas'); await canvas.scrollIntoViewIfNeeded();
+  const point = await canvas.evaluate((svg, p) => { const m = svg.getScreenCTM(), q = new DOMPoint(p.x, p.y).matrixTransform(m); return { x: q.x, y: q.y }; }, { x, y });
+  await page.mouse.click(point.x, point.y);
+}
+
+test('a 16:9 photo project saves within the pixel budget and opens again with its matches', async ({ page }) => {
+  test.setTimeout(60000);
+  await seedThree(page); await page.goto('/');
+  await attachPhoto(page, 3840, 2160);
+  const size = await photoSize(page);
+  expect(size.width * size.height).toBeLessThanOrEqual(4000000);
+  expect(size.width).toBeGreaterThan(2600);
+  await page.locator('#photo-tool').selectOption('match');
+  await matchAt(page, size.width * 0.3, size.height * 0.4);
+  await expect.poll(() => page.evaluate(() => Object.keys(window.abplot.store.projectPhoto.pins).length)).toBe(1);
+  const downloading = page.waitForEvent('download');
+  await page.locator('#save-project').click();
+  const file = await (await downloading).path();
+  await page.locator('#photo-project-file').setInputFiles(file);
+  await expect(page.locator('#photo-status')).not.toContainText('invalid');
+  await expect.poll(() => page.evaluate(() => Object.keys(window.abplot.store.projectPhoto?.pins ?? {}).length)).toBe(1);
+});
+
+test('photo nudges are one undo step and undo shortcuts work from any focused photo control', async ({ page }) => {
+  await seedThree(page); await page.goto('/');
+  await attachPhoto(page, 1000, 600);
+  await page.locator('#photo-tool').selectOption('match');
+  await matchAt(page, 400, 300);
+  const pinned = () => page.evaluate(() => JSON.parse(JSON.stringify(window.abplot.store.projectPhoto.pins)));
+  await expect.poll(async () => Object.keys(await pinned()).length).toBe(1);
+  const [id, before] = Object.entries(await pinned())[0];
+  await page.locator('#photo-point').selectOption(id);
+  await page.locator('#photo-tool').selectOption('move');
+  await page.locator('#photo-canvas').focus();
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight');
+  expect((await pinned())[id].x).toBeGreaterThan(before.x + 4);
+  await page.locator('#photo-fit').click(); // focus lands on a button inside the photo workspace
+  await page.keyboard.press('Control+z');
+  expect((await pinned())[id]).toEqual(before);
+  await page.keyboard.press('Control+z');
+  await expect.poll(async () => Object.keys(await pinned()).length).toBe(0);
+});

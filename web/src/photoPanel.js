@@ -213,14 +213,17 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     if (arrows[event.key] && $('tool').value === 'move' && photo.pins[selected]) {
       event.preventDefault(); const [x, y] = arrows[event.key], delta = event.shiftKey ? 10 : 1;
-      store.applyProject(project => { const p = project.photo.pins[selected]; p.x = Math.max(0, Math.min(photo.width, p.x + x * delta)); p.y = Math.max(0, Math.min(photo.height, p.y + y * delta)); });
+      // One undo step per nudged match, as in the plan editor; key repeat must not flood the history.
+      store.applyProject(project => { const p = project.photo.pins[selected]; p.x = Math.max(0, Math.min(photo.width, p.x + x * delta)); p.y = Math.max(0, Math.min(photo.height, p.y + y * delta)); }, { historyGroup: `photo-nudge:${selected}` });
     }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? store.redo() : store.undo(); }
   });
   new ResizeObserver(() => { if (!workspace.hidden && photo) render(); }).observe(svg);
   workspace.addEventListener('keydown', event => {
     if (event.key === 'Escape') { $('tool').value = 'select'; $('tool').dispatchEvent(new Event('change')); event.preventDefault(); }
-    event.stopPropagation();
+    // Photo keys stay here, but the shared undo/redo shortcuts reach the document handler
+    // whatever control has focus, exactly as they do in the plan workspace.
+    const history = (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase());
+    if (!history) event.stopPropagation();
   });
   function open() { workspace.hidden = false; onOpen(); render(); void listRecoveries(); }
   function cancelOpen() { reads.cancel(); loading = false; cancelPointer(); }
