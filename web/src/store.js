@@ -41,6 +41,9 @@ export class Store {
   #epoch = 0;
   #photo = null;
   #historyGroup = null;
+  #seq = 0;        // save requests issued so far
+  #storedSeq = 0;  // the request whose document, or a newer one, storage now holds
+  #dirty = false;  // the current document differs from what storage holds
 
   constructor({ document: doc = defaultDocument(), storage = null, locks = undefined } = {}) {
     validateGeometry(doc);
@@ -93,13 +96,20 @@ export class Store {
   get projectPhoto() { return this.#photo; }
   get hasConflict() { return this.#conflict; }
   get isSaving() { return this.#saving > 0; }
+  /**
+   * Whether closing the page now would lose edits: autosave is paused by a
+   * conflict, failed, unavailable, or still waiting for the lock manager.
+   */
+  get hasUnsavedChanges() { return this.#dirty; }
   whenSaved() { return this.#queue; }
 
   /**
    * Best-effort synchronous write for pagehide / visibilitychange. A save
    * queued behind the lock manager may never run in a page being discarded,
    * so store the latest document directly, under the same last-read check.
-   * The queued write then finds its own text already stored and is harmless.
+   * Writes still queued behind the lock are then superseded and skip: they
+   * were issued for this document or an older one, and an older one must
+   * never go back over what was just stored.
    * Returns whether the latest document is now stored.
    */
   flush() {
@@ -107,10 +117,14 @@ export class Store {
     try {
       if ((this.#storage.getItem(STORAGE_KEY) ?? null) !== this.#expected) return false;
       const text = JSON.stringify(this.#doc);
-      if (text === this.#expected) return true;
-      this.#storage.setItem(STORAGE_KEY, text);
-      this.#expected = text;
-      this.#hasSaved = true;
+      if (text !== this.#expected) {
+        this.#storage.setItem(STORAGE_KEY, text);
+        this.#expected = text;
+        this.#hasSaved = true;
+        this.#saveError = null;
+      }
+      this.#storedSeq = this.#seq;
+      this.#dirty = false;
       return true;
     } catch { return false; }
   }
@@ -127,6 +141,8 @@ export class Store {
     this.#undo = []; this.#redo = [];
     this.#doc = doc; this.#selectedId = null; this.#revision++;
     this.#hasSaved = saved !== null;
+    this.#storedSeq = this.#seq;
+    this.#dirty = false;
     this.#changed(false);
   }
 
@@ -288,11 +304,14 @@ export class Store {
   }
 
   #save(replaceUnreadable = false) {
-    if (!this.#storage || this.#conflict || (this.#loadError && !replaceUnreadable)) return;
     const text = JSON.stringify(this.#doc);
-    const epoch = this.#epoch;
+    this.#dirty = text !== this.#expected;
+    if (!this.#storage || this.#conflict || (this.#loadError && !replaceUnreadable)) return;
+    const epoch = this.#epoch, seq = ++this.#seq;
     const persist = () => {
       if (epoch !== this.#epoch || this.#conflict) return;
+      // The unload flush, or a later request, already stored this document or a newer one.
+      if (seq <= this.#storedSeq) return;
       try {
         if ((this.#storage.getItem(STORAGE_KEY) ?? null) !== this.#expected) {
           this.#conflict = true;
@@ -301,8 +320,10 @@ export class Store {
         }
         this.#storage.setItem(STORAGE_KEY, text);
         this.#expected = text;
+        this.#storedSeq = seq;
         this.#hasSaved = true;
         this.#saveError = null;
+        this.#dirty = JSON.stringify(this.#doc) !== text;
         if (replaceUnreadable) {
           this.#loadError = null; this.#recoveryText = null;
           // Edits made while the recovery write waited for its lock were kept

@@ -765,7 +765,9 @@ $('export-options-button').addEventListener('click', () => $('export-options').s
 $('export-close').addEventListener('click', () => $('export-options').close());
 $('export-options').addEventListener('keydown', event => event.stopPropagation());
 $('print-field-sheet').addEventListener('click', () => runExport($('print-field-sheet'), () => printFieldSheet(store.document)));
-window.addEventListener('beforeunload', event => { if (baselineDirty || quickEntry.hasDraft || reviewPanel.hasDraft) { event.preventDefault(); event.returnValue = ''; } });
+// A save still waiting for the lock is written now; the prompt is only for work that cannot be saved:
+// unapplied fields, or edits held in memory because autosave is paused, failed or unavailable.
+window.addEventListener('beforeunload', event => { store.flush(); if (baselineDirty || quickEntry.hasDraft || reviewPanel.hasDraft || store.hasUnsavedChanges) { event.preventDefault(); event.returnValue = ''; } });
 // Saves queue behind the lock manager, and a page being discarded may never run
 // them. The editor registered its own pagehide/visibilitychange listeners first,
 // so an in-progress drag is already committed by the time these flush it.

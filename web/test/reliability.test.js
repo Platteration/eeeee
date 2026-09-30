@@ -119,3 +119,46 @@ test('edits during a locked recovery replacement are subsequently saved', async 
   assert.equal(JSON.parse(disk.getItem()).name, 'Edited while recovering');
   assert.equal(store.isSaving, false); assert.equal(store.needsRecovery, false);
 });
+
+test('a queued save never regresses a newer document the unload flush already stored', async () => {
+  const disk = storage(); let open; const opened = new Promise(resolve => { open = resolve; });
+  const locks = { request: async (_, action) => { await opened; return action(); } };
+  const store = Store.fromStorage(disk, { locks });
+  const writes = [], write = disk.setItem; disk.setItem = (key, value) => { writes.push(JSON.parse(value).name); write(key, value); };
+  store.apply(d => { d.name = 'edit 1'; }); store.apply(d => { d.name = 'edit 2'; });
+  assert.equal(store.flush(), true); assert.deepEqual(writes, ['edit 2']);
+  open(); await store.whenSaved();
+  assert.deepEqual(writes, ['edit 2'], 'the queued writes must not put edit 1 back, even briefly');
+  assert.equal(JSON.parse(disk.getItem()).name, 'edit 2'); assert.equal(store.hasUnsavedChanges, false);
+  store.apply(d => { d.name = 'edit 3'; }); await store.whenSaved();
+  assert.deepEqual(writes, ['edit 2', 'edit 3'], 'later saves still write');
+});
+
+test('unsaved changes are reported while autosave is paused, failed or unavailable, and clear on a durable write', async () => {
+  const disk = storage(), store = Store.fromStorage(disk);
+  store.apply(d => { d.name = 'mine'; }); assert.equal(store.hasUnsavedChanges, false);
+  disk.setItem(STORAGE_KEY, JSON.stringify({ ...defaultDocument(), name: 'theirs' })); // another tab saved
+  store.apply(d => { d.name = 'mine again'; });
+  assert.equal(store.hasConflict, true); assert.equal(store.hasUnsavedChanges, true);
+  store.loadLatest(); assert.equal(store.hasUnsavedChanges, false);
+
+  const failing = storage(), write = failing.setItem; failing.setItem = () => { throw Error('quota'); };
+  const memoryOnly = Store.fromStorage(failing);
+  memoryOnly.apply(d => { d.name = 'quota'; });
+  assert.match(memoryOnly.saveError, /only in memory/); assert.equal(memoryOnly.hasUnsavedChanges, true);
+  failing.setItem = write; memoryOnly.retrySaving(); assert.equal(memoryOnly.hasUnsavedChanges, false);
+
+  const noStorage = new Store({ storage: null });
+  assert.equal(noStorage.hasUnsavedChanges, false);
+  noStorage.apply(d => { d.name = 'nowhere to save'; }); assert.equal(noStorage.hasUnsavedChanges, true);
+
+  let release, entered, requested;
+  const locks = { request: async (_, action) => { entered(); await new Promise(resolve => { release = resolve; }); return action(); } };
+  const queued = Store.fromStorage(storage(), { locks });
+  requested = new Promise(resolve => { entered = resolve; });
+  queued.apply(d => { d.name = 'waiting'; }); assert.equal(queued.hasUnsavedChanges, true, 'still waiting for the lock');
+  await requested; release(); await queued.whenSaved(); assert.equal(queued.hasUnsavedChanges, false);
+  requested = new Promise(resolve => { entered = resolve; });
+  queued.apply(d => { d.name = 'flushed'; }); assert.equal(queued.flush(), true); assert.equal(queued.hasUnsavedChanges, false);
+  await requested; release(); await queued.whenSaved(); assert.equal(queued.hasUnsavedChanges, false);
+});

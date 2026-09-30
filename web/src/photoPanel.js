@@ -1,7 +1,7 @@
 import { photoRecovery } from './photoRecovery.js';
 import { loadPhoto, preparePhoto } from './ocr.js';
 import { withTimeout, LatestOperation } from './operations.js';
-import { changeUnit, fileStem, nextLabel, parseDocument, serializeDocument } from './plotDocument.js';
+import { changeUnit, fileStem, newId, nextLabel, parseDocument, serializeDocument } from './plotDocument.js';
 import { pointDisplayName, normalizePointDescription } from './pointNames.js';
 import { reviewMeasurements } from './measurementImport.js';
 import { downloadBlob, downloadText } from './exporters.js';
@@ -47,7 +47,8 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
   // open project continues that project, and a file from disk starts a new one.
   const RECOVERY_KEEP = 2, lineage = new Map(), writtenRecords = new Set();
   const projectOf = id => lineage.get(id) ?? id;
-  function mintRecovery(project = null) { const id = crypto.randomUUID(); lineage.set(id, project ?? id); return id; }
+  // newId falls back when crypto.randomUUID is missing: it is a secure-context API, absent on plain-HTTP LAN origins.
+  function mintRecovery(project = null) { const id = newId(); lineage.set(id, project ?? id); return id; }
   const note = text => { $('status').textContent = text; };
   function setRecoveryStatus(next) { recoveryStatus = next; $('recovery-status').textContent = next.message; onRecoveryStatus(next); }
   async function listRecoveries() {
