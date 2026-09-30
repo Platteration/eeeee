@@ -131,6 +131,10 @@ npm ci               # Node 22 or 24; prepares local OCR assets
 npm start            # http://localhost:8000
 ```
 
+The browser editor deploys to GitHub Pages from the default branch (see
+[RELEASE.md](RELEASE.md)), opens offline after one load over HTTPS, and can be
+added to a phone's home screen.
+
 **Pool photo overlay** in the browser supports matching existing points or
 clicking a photo and entering A/B measurements. Photo projects save the image
 and matches separately from the standard iOS-compatible plot JSON. Details and
