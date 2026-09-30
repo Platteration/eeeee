@@ -54,7 +54,7 @@ export function setupOcrPanel(panel) {
     const timeout = setTimeout(() => controller?.abort(), 65000);
     try {
       if (remote && $('code').value) {
-        const response = await fetch('/api/ocr/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('code').value }), signal });
+        const response = await fetch('api/ocr/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('code').value }), signal });
         $('code').value = '';
         if (!response.ok) { const result = await response.json(); throw new Error(result.error?.message ?? 'Access code rejected.'); }
       }
@@ -71,5 +71,5 @@ export function setupOcrPanel(panel) {
   $('local').addEventListener('click', () => void recognize(false));
   $('online').addEventListener('click', () => void recognize(true));
   panel.dialog.addEventListener('close', () => { cancel(); preparation.cancel(); });
-  fetch('/api/ocr/config').then(r => r.ok ? r.json() : null).then(config => { online = config?.enabled === true; $('online-controls').hidden = !online; }).catch(() => {});
+  fetch('api/ocr/config').then(r => r.ok ? r.json() : null).then(config => { online = config?.enabled === true; $('online-controls').hidden = !online; }).catch(() => {});
 }

@@ -1,0 +1,74 @@
+name: Deploy web app to GitHub Pages
+on:
+  push:
+    branches: ["claude/ios-ab-plotting-ar-232m3z"]
+    paths: ["web/**", ".github/workflows/deploy-pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+# One deployment at a time; a queued deploy of a newer commit is never cancelled in favour of an older one.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Verify release contains only public runtime files
+        run: |
+          test -f dist/index.html
+          test -f dist/vendor/ocr/lang/eng.traineddata.gz
+          test -f dist/privacy.html
+          test ! -e dist/server
+          test ! -e dist/node_modules
+          test ! -e dist/.env
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Probe the deployed site
+        working-directory: web
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: |
+          # The CDN can lag the deployment by a few seconds; retry before failing.
+          for attempt in 1 2 3 4 5 6; do
+            if node tools/smoke.js "$PAGE_URL"; then exit 0; fi
+            echo "Smoke attempt $attempt failed; retrying in 20s"; sleep 20
+          done
+          exit 1

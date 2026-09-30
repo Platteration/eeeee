@@ -51,7 +51,7 @@ export async function recognizeLocal(blob, { signal, progress = () => {}, create
 }
 
 export async function recognizeOnline(blob, { signal } = {}) {
-  const response = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob, signal });
+  const response = await fetch('api/ocr', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob, signal });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error?.message ?? 'Online recognition failed. Try again later.');
   return result;
