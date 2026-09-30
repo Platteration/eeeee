@@ -269,3 +269,15 @@ test('photo nudges are one undo step and undo shortcuts work from any focused ph
   await page.keyboard.press('Control+z');
   await expect.poll(async () => Object.keys(await pinned()).length).toBe(0);
 });
+
+test('declining to discard drafts when opening a project reports the cancelled open', async ({ page }) => {
+  await seedBaseline(page); await page.goto('/');
+  await page.locator('#quick-a').fill('3');
+  const incoming = { name: 'Incoming', pointA: [100, 400], pointB: [300, 400], abDistance: 9, unit: 'meters', points: [] };
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#file').setInputFiles({ name: 'incoming.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(incoming)) });
+  await expect(page.locator('#status')).toContainText('Open cancelled');
+  await expect(page.locator('#cancel-file')).toBeHidden();
+  expect(await page.evaluate(() => window.abplot.store.document.abDistance)).toBe(2);
+  await expect(page.locator('#quick-a')).toHaveValue('3');
+});

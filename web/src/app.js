@@ -458,6 +458,7 @@ async function importFile(file) {
   try {
     const opened = await photoPanel.openProject(file);
     if (opened && current()) { baselineDirty = false; editor.setMode('select'); render(); setStatus(`Imported ${file.name}. Undo restores the previous project.`); }
+    else if (current()) setStatus('Open cancelled. The current project is unchanged.');
 
   } catch (error) {
     if (current()) setStatus(`Could not import ${file.name}: ${error.message}`, 'error');

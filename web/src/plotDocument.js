@@ -77,8 +77,10 @@ export function newId() {
 
 /** The next free numeric label, mirroring the iOS app's numbering. */
 export function nextLabel(points) {
+  // Only plain positive integers count, as in the iOS editor (Swift's Int("1e3") is nil),
+  // so both apps suggest the same next number for the same plot.
   const highest = points.reduce((max, point) => {
-    const n = Number(point.label);
+    const n = /^\d+$/.test(point.label) ? Number(point.label) : NaN;
     return Number.isSafeInteger(n) && n > max ? n : max;
   }, 0);
   if (highest < Number.MAX_SAFE_INTEGER) return String(highest + 1);

@@ -228,3 +228,13 @@ describe('unit conversion and export text stay faithful to what the user typed',
     assert.equal(back.name, 'Bay [ 12, 4 ]'); assert.equal(back.points[0].label, '[ 3, 4 ]'); assert.equal(back.points[0].note, 'tape [ 1, 2 ]');
   });
 });
+
+describe('label suggestions match the iOS rule', () => {
+  it('counts only plain positive integers, so both apps suggest the same next number', () => {
+    const points = labels => labels.map((label, i) => ({ id: `id${i}`, label, position: { x: 0, y: 0 } }));
+    assert.equal(nextLabel(points(['1', '2', '3'])), '4');
+    assert.equal(nextLabel(points(['1e3', '0x10', ' 7 ', '1.0', '-5', '2'])), '3');
+    assert.equal(nextLabel(points(['Oak', 'Deep end'])), '1');
+    assert.equal(nextLabel(points(['12', 'P13'])), '13');
+  });
+});
