@@ -79,6 +79,8 @@ test('an interrupted drag saves its last position as one undoable edit', async (
 });
 
 test('JSON validation, named import, units and all four downloads work', async ({ page }) => {
+  // setInputFiles performs no actionability wait, so make sure the editor's listeners are attached first.
+  await expect(page.locator('#startup')).toBeHidden();
   await page.locator('#file').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{bad') });
   await expect(page.locator('#status')).toContainText('Could not import');
   await expect(points(page)).toHaveCount(0);

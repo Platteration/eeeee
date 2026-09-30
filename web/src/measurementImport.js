@@ -35,7 +35,7 @@ export function parseRows(text, { delimiter = 'auto', header = false, columns = 
   if (!columns.every(n => Number.isSafeInteger(n) && n >= 0 && n < 30)) throw new Error('Choose column numbers between 1 and 30.');
   if (!records.length) throw new Error('No measurement rows found.');
   if (new Set(columns).size !== 3) throw new Error('Choose a different column for each field.');
-  return records.map((fields, index) => ({ source: index + 1 + Number(header), label: fields[columns[0]] ?? '', first: fields[columns[1]] ?? '', second: fields[columns[2]] ?? '', side: 'above' }));
+  return records.map((fields, index) => ({ source: index + 1 + Number(header), label: fields[columns[0]] ?? '', first: fields[columns[1]] ?? '', second: fields[columns[2]] ?? '', side: 'left' }));
 }
 
 export function measurementNumber(text, decimal = '.') {
@@ -68,7 +68,8 @@ export function reviewMeasurements(rows, doc, { mode = 'offsets', unit = doc.uni
         const along = (s * s - t * t + 1) / 2;
         const height = s * s - along * along;
         if (height < -1e-10) throw new Error('These distances cannot form a triangle with A–B.');
-        t = Math.sqrt(Math.max(0, height)) * (row.side === 'below' ? 1 : -1); s = along;
+        // Positive t is the right-hand side when facing B from A, whatever way the baseline is drawn.
+        t = Math.sqrt(Math.max(0, height)) * (row.side === 'right' ? 1 : -1); s = along;
       }
       if (![s, t].every(n => Number.isFinite(n) && Math.abs(n) <= 1e6)) throw new Error('Measurement exceeds one million baseline lengths.');
       const description = normalizePointDescription(row.description ?? existing?.description);

@@ -18,7 +18,7 @@ export function setupReviewPanel({ store, editor }) {
     <form id="remeasure-form" hidden>
       <p class="note">These are the drawing’s current distances. Replace them with your tape readings to reposition this point. Unfinished readings stay here when you switch points.</p>
       <div class="measurement-pair"><label>Measured from A <input id="remeasure-a" type="text" inputmode="decimal" aria-describedby="remeasure-status" required /></label><label>Measured from B <input id="remeasure-b" type="text" inputmode="decimal" aria-describedby="remeasure-status" required /></label></div>
-      <label>Side of A → B <select id="remeasure-side"><option value="above">Above the baseline</option><option value="below">Below the baseline</option></select></label>
+      <label>Side of A→B, facing B from A <select id="remeasure-side"><option value="left">Left of A→B</option><option value="right">Right of A→B</option></select></label>
       <p id="remeasure-status" role="status" class="note"></p>
       <div class="button-grid"><button id="remeasure-save" type="submit">Save remeasurement</button><button id="remeasure-reset" type="button">Reset fields</button></div>
     </form>
@@ -46,7 +46,7 @@ export function setupReviewPanel({ store, editor }) {
     const point = currentPoint(), row = measurePoints(store.document).find(p => p.id === point?.id), divisor = UNITS[store.document.unit].toMeters;
     $('remeasure-a').value = row?.fromA == null ? '' : String(Number((row.fromA / divisor).toPrecision(12)));
     $('remeasure-b').value = row?.fromB == null ? '' : String(Number((row.fromB / divisor).toPrecision(12)));
-    $('remeasure-side').value = row?.t > 0 ? 'below' : 'above';
+    $('remeasure-side').value = row?.t > 0 ? 'right' : 'left';
   }
   function showDraft() {
     const draft = drafts.get(selected);
@@ -153,7 +153,12 @@ export function setupReviewPanel({ store, editor }) {
     const points = filteredPoints(), index = points.findIndex(point => point.id === selected), next = points[index + step];
     if (next) choose(next.id);
   });
-  $('review-label').addEventListener('input', () => { nameDrafts.set(selected, $('review-label').value); renderNameStatus(); });
+  $('review-label').addEventListener('input', () => {
+    // Typing the current label back is no draft, and 'change' will not fire for it.
+    const point = store.document.points.find(p => p.id === selected);
+    if (point && $('review-label').value === point.label) nameDrafts.delete(selected); else nameDrafts.set(selected, $('review-label').value);
+    renderNameStatus();
+  });
   $('review-label').addEventListener('change', () => {
     try {
       const label = validatePointLabel($('review-label').value, store.document.points, selected);
@@ -210,5 +215,7 @@ export function setupReviewPanel({ store, editor }) {
   editor.addEventListener('reference', () => choose('baseline'));
   host.addEventListener('keydown', event => event.stopPropagation());
   render();
-  return { choose, get hasDraft() { return drafts.size > 0 || nameDrafts.size > 0; }, discardDrafts() { drafts.clear(); nameDrafts.clear(); rendered = null; render(); } };
+  // Drafts for points that no longer exist cannot be applied or reset, so they must not block leaving or opening a project.
+  const live = key => key === 'baseline' || store.document.points.some(point => point.id === key);
+  return { choose, get hasDraft() { return [...drafts.keys()].some(live) || [...nameDrafts.keys()].some(live); }, discardDrafts() { drafts.clear(); nameDrafts.clear(); rendered = null; render(); } };
 }

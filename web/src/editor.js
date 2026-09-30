@@ -71,6 +71,10 @@ export class PlotEditor extends EventTarget {
     svg.addEventListener('contextmenu', (event) => event.preventDefault());
     window.addEventListener('blur', () => this.finishGesture());
     window.addEventListener('pagehide', () => this.finishGesture());
+    // A pointer whose pointerup or pointercancel never reached this element (a finger lifted over
+    // another control after its captured target was re-rendered) must not linger in #pointers,
+    // or every later single touch would count as the second finger of a pinch.
+    for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, this.#onStrayPointerEnd);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.finishGesture();
     });
@@ -175,8 +179,9 @@ export class PlotEditor extends EventTarget {
   #onPointerDown = (event) => {
     if (event.button !== 0 && event.button !== 1) return;
     this.#pointers.set(event.pointerId, event);
-    // A third finger neither starts a second gesture nor disturbs the pinch.
-    if (this.#pinch) return;
+    // A third finger neither starts a second gesture nor disturbs the pinch; capturing it
+    // routes its pointerup here so it is removed again.
+    if (this.#pinch) { this.#capture(event.pointerId); return; }
     if (this.#pointers.size === 2) {
       this.#beginPinch();
       return;
@@ -329,6 +334,13 @@ export class PlotEditor extends EventTarget {
     if (this.#pointers.has(event.pointerId)) this.finishGesture();
   };
 
+  #onStrayPointerEnd = (event) => {
+    if (!this.#pointers.has(event.pointerId)) return; // already handled by the element's own listeners
+    if (this.#gesture?.pointerId === event.pointerId) { this.finishGesture(); return; }
+    this.#pointers.delete(event.pointerId);
+    if (this.#pinch?.ids.includes(event.pointerId)) this.#pinch = null;
+  };
+
   /**
    * Two fingers down: zoom by how far they spread, and keep whatever was
    * between them at the start pinned between them as they move.
@@ -338,6 +350,9 @@ export class PlotEditor extends EventTarget {
     if (this.#gesture && this.#gesture.kind !== 'background') this.#store.end();
     this.#gesture = null;
     const [first, second] = [...this.#pointers.values()];
+    // The first finger was captured by its own pointerdown; capture the second too, so that
+    // re-rendering the marker under it cannot send its pointerup elsewhere.
+    this.#capture(second.pointerId);
     this.#pinch = {
       ids: [first.pointerId, second.pointerId],
       distance: Math.max(Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY), 1),
@@ -479,7 +494,8 @@ export class PlotEditor extends EventTarget {
       },
       formatLength(abDistanceMeters(doc), doc.unit),
     );
-    layer.append(label);
+    // An unscaled plot has no length to show; the panel asks for the distance instead.
+    if (isMeasurable(doc)) layer.append(label);
   }
 
   #renderPoints(doc, px) {

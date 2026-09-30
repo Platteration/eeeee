@@ -22,10 +22,11 @@ test('the editor starts, autosaves, exports and probes its optional API from a s
   await expect(page.locator('#startup')).toBeHidden();
   await expect(page.locator('main')).not.toHaveAttribute('inert');
   expect(page.url()).toContain(`${PREFIX}/`);
+  const origin = new URL(page.url()).origin;
   // The optional online OCR probe must stay inside the site, not jump to the origin root.
-  await expect.poll(() => requested.filter(url => url.includes('api/ocr/config'))).toEqual([`http://127.0.0.1:8000${PREFIX}/api/ocr/config`]);
+  await expect.poll(() => requested.filter(url => url.includes('api/ocr/config'))).toEqual([`${origin}${PREFIX}/api/ocr/config`]);
   expect(requested.some(url => url.includes(`${PREFIX}/src/photoPanel.js`))).toBe(true);
-  expect(requested.some(url => /127\.0\.0\.1:8000\/(src|styles)/.test(url))).toBe(false);
+  expect(requested.some(url => url.startsWith(`${origin}/src/`) || url.startsWith(`${origin}/styles`))).toBe(false);
 
   await page.getByLabel('A–B distance', { exact: true }).fill('4');
   await page.locator('#baseline-apply').click();
@@ -54,6 +55,6 @@ test('the editor starts, autosaves, exports and probes its optional API from a s
     }
     return results;
   });
-  expect(privacy).toMatchObject({ ok: true, url: `http://127.0.0.1:8000${PREFIX}/privacy.html` });
-  expect(ocr).toMatchObject({ ok: true, url: `http://127.0.0.1:8000${PREFIX}/vendor/ocr/tesseract.esm.min.js` });
+  expect(privacy).toMatchObject({ ok: true, url: `${origin}${PREFIX}/privacy.html` });
+  expect(ocr).toMatchObject({ ok: true, url: `${origin}${PREFIX}/vendor/ocr/tesseract.esm.min.js` });
 });

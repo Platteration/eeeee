@@ -158,7 +158,7 @@ function columnsFor(selected) {
       signed: true,
       editable: true,
       title:
-        'Distance perpendicular to the baseline, positive on the canvas-down side — ' +
+        'Distance perpendicular to the baseline, positive on the right-hand side facing B from A — ' +
         'type to place the point exactly',
     },
     { key: 'fromA', head: 'From A', title: 'Straight-line distance from A' },
@@ -307,8 +307,7 @@ function renderTable(doc) {
         const label = validatePointLabel(input.value, store.document.points, row.id);
         store.apply(draft => { const point = draft.points.find(p => p.id === row.id); if (point) point.label = label; });
         input.removeAttribute('aria-invalid');
-      } catch (error) { input.setAttribute('aria-invalid', 'true'); setStatus(error.message, 'error'); }
-
+      } catch (error) { input.value = row.label; input.setAttribute('aria-invalid', 'true'); setStatus(error.message, 'error'); }
     });
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') input.blur();
@@ -362,6 +361,9 @@ function renderTable(doc) {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         store.select(row.id);
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault(); event.stopPropagation();
+        deletePoint(row.id);
       }
     });
     fragment.append(tr);
@@ -369,6 +371,11 @@ function renderTable(doc) {
 
   ui.tableBody.replaceChildren(fragment);
   restoreTableFocus(focus);
+  if (focusRowAfterDelete !== null) {
+    const remaining = ui.tableBody.querySelectorAll('tr');
+    (remaining[Math.min(focusRowAfterDelete, remaining.length - 1)] ?? ui.add).focus();
+    focusRowAfterDelete = null;
+  }
   ui.pointsEmpty.hidden = rows.length > 0;
   ui.emptyHint.hidden = rows.length > 0;
 
@@ -420,9 +427,14 @@ function render() {
 
 /* ---------------------------------------------------------------- actions */
 
+let focusRowAfterDelete = null;
 function deletePoint(id) {
   const point = store.document.points.find((p) => p.id === id);
   if (!point) return;
+  // A keyboard user deleting from inside the row should land on the next row, not on <body>.
+  const rows = [...ui.tableBody.querySelectorAll('tr')];
+  const focusedRow = document.activeElement?.closest?.('tr');
+  if (focusedRow?.dataset.id === id) focusRowAfterDelete = rows.indexOf(focusedRow);
   if (store.selectedId === id) store.select(null);
   store.apply((draft) => {
     draft.points = draft.points.filter((p) => p.id !== id);
@@ -492,8 +504,12 @@ ui.unit.addEventListener('change', () => {
 
 ui.retrySave.addEventListener('click', () => {
   if (store.hasConflict) {
-    if (!window.confirm('Load the latest saved plot? Download your current version first if you need to keep it. This resets undo history.')) return;
-    try { store.loadLatest(); editor.fit(); } catch (error) { setStatus(error.message, 'error'); }
+    const hadPhoto = Boolean(photoPanel.photo);
+    if (!window.confirm(`Load the latest saved plot? Download your current version first if you need to keep it. This resets undo history${hadPhoto ? ' and detaches the attached photo; its browser recovery copy stays under Photo → Recover work from this browser' : ''}.`)) return;
+    try {
+      store.loadLatest(); photoPanel.close(); showWorkspace('plan'); editor.fit();
+      setStatus(hadPhoto ? 'Loaded the latest save. The photo was detached; open its recovery copy from Photo → Recover work from this browser.' : 'Loaded the latest save.');
+    } catch (error) { setStatus(error.message, 'error'); }
     return;
   }
   if (store.needsRecovery && !window.confirm('Replace the unreadable previous autosave with the current plot? Download its recovery copy first if you need to keep it.')) return;
@@ -643,8 +659,10 @@ function renderSheetNote() {
 for (const type of ['dragover', 'drop']) {
   document.addEventListener(type, (event) => {
     if (![...event.dataTransfer.types].includes('Files')) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('input[type=file]')) return; // the input opens the file itself
     event.preventDefault();
-    if (type === 'drop') importFile(event.dataTransfer.files[0]);
+    if (type === 'drop' && !target?.closest('dialog[open]')) importFile(event.dataTransfer.files[0]);
   });
 }
 
@@ -700,7 +718,7 @@ document.addEventListener('keydown', (event) => {
       store.apply((draft) => {
         const point = draft.points.find((p) => p.id === selected.id);
         if (point) point.position = { x: point.position.x + dx * step, y: point.position.y + dy * step };
-      });
+      }, { historyGroup: `nudge:${selected.id}` });
       break;
     }
     default:
@@ -748,7 +766,7 @@ function showPanel(name) {
   $('editor-panel').classList.remove('collapsed');
 }
 for (const button of document.querySelectorAll('[data-panel]')) button.addEventListener('click', () => showPanel(button.dataset.panel));
-$('panel-collapse').addEventListener('click', () => { const collapsed = !$('panel-content').hidden; $('panel-content').hidden = collapsed; $('panel-collapse').setAttribute('aria-expanded', String(!collapsed)); $('editor-panel').classList.toggle('collapsed', collapsed); });
+$('panel-collapse').addEventListener('click', () => { const collapsed = !$('panel-content').hidden; $('panel-content').hidden = collapsed; $('panel-collapse').setAttribute('aria-expanded', String(!collapsed)); $('panel-collapse').setAttribute('aria-label', collapsed ? 'Expand editor panel' : 'Collapse editor panel'); $('editor-panel').classList.toggle('collapsed', collapsed); });
 $('workspace-plan').addEventListener('click', () => { photoPanel.close(); showWorkspace('plan'); });
 for (const [id, mode] of [['tool-select','select'],['tool-move','move'],['tool-add','add'],['tool-done','select']]) $(id).addEventListener('click', () => editor.setMode(mode));
 editor.addEventListener('modechange', event => {

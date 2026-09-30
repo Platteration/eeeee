@@ -4,9 +4,10 @@ import { test, expect } from '@playwright/test';
 test('local photo OCR uses only site assets and requires review before import', async ({ page }) => {
   test.setTimeout(90000);
   const external = [], errors = [];
-  page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:8000/')) external.push(request.url()); });
-  page.on('pageerror', error => errors.push(error.message));
   await seedBaseline(page); await page.goto('/');
+  const origin = new URL(page.url()).origin;
+  page.on('request', request => { if (/^https?:/.test(request.url()) && !request.url().startsWith(`${origin}/`)) external.push(request.url()); });
+  page.on('pageerror', error => errors.push(error.message));
   const base64 = await page.evaluate(async () => {
     const canvas = document.createElement('canvas'); canvas.width = 1000; canvas.height = 160;
     const context = canvas.getContext('2d'); context.fillStyle = 'white'; context.fillRect(0, 0, 1000, 160);

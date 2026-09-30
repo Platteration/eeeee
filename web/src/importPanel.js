@@ -30,7 +30,7 @@ export function setupImportPanel({ store, editor, setStatus }) {
         if (options().mode === 'distances') {
           const side = document.createElement('select');
           side.setAttribute('aria-label', `Side in row ${index + 1}`);
-          side.add(new Option('Above A→B', 'above')); side.add(new Option('Below A→B', 'below')); side.value = row.side;
+          side.add(new Option('Left of A→B', 'left')); side.add(new Option('Right of A→B', 'right')); side.value = row.side;
           side.addEventListener('change', () => { rows[index].side = side.value; draftRevision++; preview(); }); sideCell.append(side);
         }
         tr.append(sideCell);

@@ -55,7 +55,9 @@ export function abDistanceMeters(doc) {
 /** Convert the displayed distance without changing the physical plot. */
 export function changeUnit(doc, unit) {
   if (!Object.hasOwn(UNITS, unit)) throw new Error('Unknown length unit');
-  const distance = abDistanceMeters(doc) / UNITS[unit].toMeters;
+  // Twelve significant digits: a feet -> meters -> feet round trip returns the typed number
+  // rather than 7.099999999999999 in the field and in exports.
+  const distance = Number((abDistanceMeters(doc) / UNITS[unit].toMeters).toPrecision(12));
   if (!Number.isFinite(distance)) throw new Error('The converted distance is too large');
   doc.abDistance = distance;
   doc.unit = unit;
@@ -195,7 +197,8 @@ export function toWireFormat(doc) {
  */
 export function serializeDocument(doc, { pretty = true } = {}) {
   const json = JSON.stringify(toWireFormat(doc), null, pretty ? 2 : 0);
-  return pretty ? json.replace(/\[\s+(-?[\d.eE+-]+),\s+(-?[\d.eE+-]+)\s+\]/g, '[$1, $2]') : json;
+  // Only the coordinate keys are collapsed, so a name or note containing "[ 1, 2 ]" survives verbatim.
+  return pretty ? json.replace(/("(?:pointA|pointB|position)": )\[\s+(-?[\d.eE+-]+),\s+(-?[\d.eE+-]+)\s+\]/g, '$1[$2, $3]') : json;
 }
 
 /**

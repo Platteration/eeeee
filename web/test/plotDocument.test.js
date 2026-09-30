@@ -205,3 +205,26 @@ describe('portable imports', () => {
     assert.equal(nextLabel([{ label: String(Number.MAX_SAFE_INTEGER) }, { label: '1' }]), '2');
   });
 });
+
+describe('unit conversion and export text stay faithful to what the user typed', () => {
+  it('returns the typed distance after a unit round trip instead of a drifted float', () => {
+    for (const [distance, unit, other] of [[7.1, 'feet', 'meters'], [2, 'meters', 'feet'], [3, 'meters', 'feet'], [12.25, 'feet', 'meters']]) {
+      const doc = { ...defaultDocument(), abDistance: distance, unit };
+      changeUnit(doc, other); changeUnit(doc, unit);
+      assert.equal(doc.abDistance, distance, `${distance} ${unit}`);
+    }
+    const doc = { ...defaultDocument(), abDistance: 2, unit: 'meters' };
+    changeUnit(doc, 'feet');
+    assert.ok(Math.abs(doc.abDistance - 2 / 0.3048) < 1e-9, 'conversion itself stays exact to nine decimals');
+  });
+
+  it('collapses only coordinate arrays when pretty-printing, never text that looks like one', () => {
+    const doc = { ...defaultDocument(), name: 'Bay [ 12, 4 ]' };
+    doc.points.push({ id: '0B2C1D3E-1111-4222-8333-444455556666', label: '[ 3, 4 ]', position: { x: 120, y: 340 }, note: 'tape [ 1, 2 ]' });
+    const text = serializeDocument(doc);
+    assert.match(text, /"position": \[120, 340\]/);
+    assert.match(text, /"pointA": \[\d+, \d+\]/);
+    const back = parseDocument(text);
+    assert.equal(back.name, 'Bay [ 12, 4 ]'); assert.equal(back.points[0].label, '[ 3, 4 ]'); assert.equal(back.points[0].note, 'tape [ 1, 2 ]');
+  });
+});

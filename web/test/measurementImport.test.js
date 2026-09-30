@@ -20,7 +20,7 @@ test('decimal comma is explicit and ambiguous values are rejected', () => {
 });
 test('A/B distances reproduce iOS triangle geometry and baseline sides', () => {
   const doc = { ...defaultDocument(), abDistance: 4 };
-  const rows = parseRows('P1 3 3\nP2 3 3'); rows[1].side = 'below';
+  const rows = parseRows('P1 3 3\nP2 3 3'); rows[1].side = 'right';
   const result = reviewMeasurements(rows, doc, { mode: 'distances' });
   assert.equal(result.valid, true);
   const measured = measurePoints(result.document);
@@ -44,4 +44,13 @@ test('250-point import is portable and commits as one undoable action', () => {
   const store = new Store(); store.replace(result.document);
   assert.equal(parseDocument(serializeDocument(store.document)).points.length, 250);
   store.undo(); assert.equal(store.document.points.length, 0); assert.equal(store.canUndo, false);
+});
+
+test('the chosen side means the same physical side whichever way the baseline is drawn', () => {
+  const leftToRight = { ...defaultDocument(), pointA: { x: 100, y: 400 }, pointB: { x: 300, y: 400 }, abDistance: 4, unit: 'meters' };
+  const rightToLeft = { ...defaultDocument(), pointA: { x: 300, y: 400 }, pointB: { x: 100, y: 400 }, abDistance: 4, unit: 'meters' };
+  const place = (doc, side) => { const rows = parseRows('P 3 3'); rows[0].side = side; return reviewMeasurements(rows, doc, { mode: 'distances' }).document.points.at(-1).position; };
+  // Facing B from A: with B to the right, "right" is canvas-down; with B to the left, "right" is canvas-up.
+  assert.ok(place(leftToRight, 'right').y > 400 && place(leftToRight, 'left').y < 400);
+  assert.ok(place(rightToLeft, 'right').y < 400 && place(rightToLeft, 'left').y > 400);
 });

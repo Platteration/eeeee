@@ -538,11 +538,7 @@ tbody tr:focus-visible {
 }
 
 @media (max-width: 860px) {
-  main {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(16rem, 1fr) auto;
-  }
-
+  /* Layout below 860px is the flex column defined further down, shared with phones. */
   .panel {
     border-left: none;
     border-top: 1px solid var(--border);
@@ -563,7 +559,7 @@ tbody tr:focus-visible {
   .zoom-buttons button, .row-delete { min-width: 44px; min-height: 44px; }
 }
 /* Reviewed imports share the editor's typography and native controls. */
-dialog { box-sizing: border-box; width: min(960px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 20px; border: 1px solid #c8c8ce; border-radius: 14px; color: #202024; background: #fff; }
+dialog { box-sizing: border-box; width: min(960px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--surface); }
 dialog::backdrop { background: #0008; }
 dialog textarea { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 16px; padding: 10px; font: inherit; }
 .entry-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0; }
@@ -638,7 +634,6 @@ dialog table input { width: 100px; }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #101319; --outline-fill: #399eff13; }
   .outline-warning { background: #352b18; color: #ffdc9a; border-color: #705221; }
-  dialog { color-scheme: light; }
 }
 
 /* Project workspace: one canvas and one focused set of controls. */
@@ -651,6 +646,7 @@ input[type=text], input[type=number], select { padding: 9px 10px; }
 button { border-radius: 8px; padding: 9px 13px; }
 button.primary, #bulk-entry, #remeasure-save { background: var(--accent); color: #fff; border-color: var(--accent); }
 button[aria-pressed=true] { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.primary:hover:not(:disabled), button[aria-pressed=true]:hover:not(:disabled), #bulk-entry:hover:not(:disabled), #remeasure-save:hover:not(:disabled) { color: #fff; border-color: var(--accent); filter: brightness(1.08); }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid #73b4ff; outline-offset: 2px; }
 .app-bar { gap: 16px; padding: 12px 20px; flex-wrap: wrap; }
 .brand { flex: 0 0 auto; }.brand p { max-width: 220px; }
@@ -708,7 +704,7 @@ main.photo-active { display: block; overflow: auto; background: var(--surface); 
  .brand p { display: none; }.app-bar { gap: 10px; }
  .history-actions button { padding: 8px; }
 }
-@media (max-width: 700px) {
+@media (max-width: 860px) {
  body { height: 100dvh; }.app-bar { padding: 8px 12px; gap: 7px; }
  .brand { flex: 0 0 auto; }.brand h1 { font-size: 17px; }
  .project-title { flex: 1 1 calc(100% - 80px); max-width: none; }.project-title input { min-height: 36px; padding: 5px 8px; }
@@ -734,6 +730,9 @@ main.photo-active { display: block; overflow: auto; background: var(--surface); 
 }
 @media (prefers-color-scheme: dark) {
  :root { --accent: #246fc7; --text-dim: #afbac8; }
+ .link-button, button:hover:not(:disabled) { color: #6db3ff; }
+ button:hover:not(:disabled) { border-color: #6db3ff; }
+ .remeasure-badge { color: #f0b35a; }
  .photo-recovery { background: #222e3c; }
  #pool-photo .photo-controls fieldset { border-color: var(--border); }
 }
@@ -744,15 +743,22 @@ details.photo-recovery { display: block; }
 #photo-canvas[data-tool=select] { cursor: default; }
 #photo-canvas[data-tool=move], #photo-canvas[data-tool=pan] { cursor: grab; }
 #photo-canvas[data-tool=match] { cursor: crosshair; }
-@media (max-width:700px) {
+@media (max-width:860px) {
  main.field-editing .canvas-wrap { flex: 0 0 85px; min-height: 85px; }
  main.field-editing .panel { flex: 1; }
  main.field-editing .canvas-overlay, main.field-editing .empty-hint { display: none; }
 }
 
-@media (max-width:700px) and (max-height:550px) {
- .canvas-wrap { flex: 0 0 85px; min-height: 85px; }
- .panel { flex: 1; }.canvas-overlay, .empty-hint { display: none; }
+/* Short viewports (phones in landscape): a compact header, the tool strip, and the rest for the panel.
+   Collapsing the panel hands the height back to the plan. */
+@media (max-width:860px) and (max-height:550px) {
+ .app-bar { flex-wrap: nowrap; padding: 6px 12px; gap: 8px; }.brand h1 { font-size: 15px; }
+ .project-title { flex: 1 1 120px; min-width: 100px; }.project-title .status { min-height: 0; }
+ .app-bar-actions { flex: 0 0 auto; }.app-bar-actions button { flex: 0 0 auto; padding: 6px 8px; }
+ .canvas-wrap { flex: 0 0 54px; min-height: 54px; }.tool-help { display: none; }
+ .panel { flex: 1; min-height: 0; }.canvas-overlay, .empty-hint { display: none; }
+ main:has(.panel.collapsed) .canvas-wrap { flex: 1 1 auto; }
+ main:has(.panel.collapsed) .canvas-overlay { display: block; }
 }
 
 body { height: var(--app-height, 100dvh); }
