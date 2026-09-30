@@ -77,6 +77,23 @@ struct HistoryChecks {
         model.setDistance(.infinity)
         precondition(model.canRedo)
 
+        // Unit round trips return the typed number, as the web editor's conversion does.
+        let roundTrip = PlotViewModel(saveURL: directory.appendingPathComponent("units.json"))
+        roundTrip.setUnit(.feet)
+        roundTrip.setDistance(7.1)
+        roundTrip.setUnit(.meters)
+        roundTrip.setUnit(.feet)
+        precondition(roundTrip.doc.abDistance == 7.1)
+
+        // Deleting the highest-numbered point frees its number, as the web editor does.
+        let renumber = PlotViewModel(saveURL: directory.appendingPathComponent("renumber.json"))
+        renumber.addPoint(at: CGPoint(x: 10, y: 10))
+        renumber.addPoint(at: CGPoint(x: 20, y: 20))
+        renumber.selectedPointID = renumber.doc.points[1].id
+        renumber.deleteSelectedPoint()
+        renumber.addPoint(at: CGPoint(x: 30, y: 30))
+        precondition(renumber.doc.points.map(\.label) == ["1", "2"])
+
         // Restoring history must update autosave; relaunch starts fresh history.
         let reloaded = PlotViewModel(saveURL: url)
         precondition(reloaded.doc == model.doc)
@@ -213,6 +230,10 @@ struct HistoryChecks {
         exported.points[0].label = "Point, \"north\"\nline"
         let escapedCSV = try PlotCSV.string(for: exported)
         precondition(escapedCSV.contains("\"Point, \"\"north\"\"\nline\""))
+        // A label that reads as a spreadsheet formula is neutralised; numbers are not.
+        exported.points[0].label = "=1+1"
+        let formulaCSV = try PlotCSV.string(for: exported)
+        precondition(formulaCSV.contains("\"'=1+1\",") && !formulaCSV.contains("'-"))
 
         // Invalid geometry or distance must fail rather than export NaN values.
         exported.abDistance = 0

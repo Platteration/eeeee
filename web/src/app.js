@@ -124,7 +124,8 @@ function renderScale(doc) {
       ui.distance.value = String(converted); baselineDraftUnit = doc.unit;
     }
   }
-  if (!baselineDirty && document.activeElement !== ui.distance) ui.distance.value = doc.abDistance ? String(doc.abDistance) : '';
+  // Twelve significant digits: a file written by an app that converted units without rounding still reads 7.1, not 7.099999999999999.
+  if (!baselineDirty && document.activeElement !== ui.distance) ui.distance.value = doc.abDistance ? String(Number(doc.abDistance.toPrecision(12))) : '';
   ui.unit.value = doc.unit;
   previewBaseline();
 

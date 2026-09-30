@@ -322,3 +322,10 @@ test('the image-check confirmation applies only to recognised text, and a finish
   await expect(page.locator('#entry-confirmation')).toBeHidden();
   await page.locator('#entry-close').click();
 });
+
+test('a drifted distance from another app displays as the number that was typed', async ({ page }) => {
+  await page.addInitScript(key => localStorage.setItem(key, JSON.stringify({ name: 'Drift', pointA: [100, 400], pointB: [300, 400], abDistance: 7.099999999999999, unit: 'feet', points: [] })), KEY);
+  await page.goto('/');
+  await expect(page.getByLabel('A–B distance', { exact: true })).toHaveValue('7.1');
+  expect(await page.evaluate(() => window.abplot.store.document.abDistance)).toBe(7.099999999999999); // display only; the file value is untouched
+});

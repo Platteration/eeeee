@@ -220,6 +220,8 @@ final class PlotViewModel: ObservableObject {
         guard let id = selectedPointID else { return }
         doc.points.removeAll { $0.id == id }
         selectedPointID = nil
+        // Recompute from the remaining points, as a relaunch would and as the web editor does.
+        nextLabelNumber = Self.nextLabel(in: doc)
         save()
     }
 
@@ -240,7 +242,10 @@ final class PlotViewModel: ObservableObject {
         guard unit != doc.unit else { return }
         let convertedDistance = doc.abDistanceMeters / unit.toMeters
         guard convertedDistance.isFinite else { return }
-        doc.abDistance = convertedDistance
+        // Twelve significant digits, as the web editor rounds: a feet → meters → feet
+        // round trip returns the typed number rather than 7.099999999999999, which
+        // would otherwise be written to plot.json, the CSV and the scan sheet.
+        doc.abDistance = Double(String(format: "%.12g", convertedDistance)) ?? convertedDistance
         doc.unit = unit
         save()
     }

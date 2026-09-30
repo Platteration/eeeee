@@ -38,12 +38,17 @@ enum PlotCSV {
             // Double's string representation is locale-independent and retains
             // small measurements without rounding them to zero.
             let numbers = values.map { $0 == 0 ? "0" : String($0) }
-            rows.append(([quoted(label)] + numbers + [quoted(document.unit.symbol)]).joined(separator: ","))
+            rows.append(([quoted(label, escapingFormulas: true)] + numbers + [quoted(document.unit.symbol)]).joined(separator: ","))
         }
         return rows.joined(separator: "\r\n") + "\r\n"
     }
 
-    private static func quoted(_ text: String) -> String {
-        "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    /// Text cells are quoted. A label that a spreadsheet would evaluate as a formula
+    /// (leading =, +, -, @, tab or carriage return, after any spaces) gets a leading
+    /// apostrophe, as the web editor's CSV does, so an imported label cannot run anything.
+    private static func quoted(_ text: String, escapingFormulas: Bool = false) -> String {
+        let first = text.drop(while: { $0 == " " }).first
+        let guarded = escapingFormulas && first.map({ "=+-@\t\r".contains($0) }) == true ? "'" + text : text
+        return "\"" + guarded.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }
