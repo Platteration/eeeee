@@ -67,8 +67,12 @@ test('malformed preferences are individually defaulted', () => {
     assert.deepEqual(readPreferences(storage(raw)), { sheet: '', planScale: '', annotateExports: false });
   }
 });
-test('PNG rejects excessive dimensions and CSV escapes formulas only in text', () => {
-  assert.throws(() => rasterSize('<svg width="1000" height="1000000">', { pixelRatio: 2 }), /megapixel/);
+test('PNG stays within the phone canvas area, rejects unrasterizable shapes, and CSV escapes formulas only in text', () => {
+  // Oversized sheets are scaled down to the canvas area a phone can draw; a shape that still
+  // needs more than 16384 px on a side after that is refused rather than encoded blank.
+  const capped = rasterSize('<svg width="10000" height="10000">', { pixelRatio: 2 });
+  assert.ok(capped.width * capped.height <= 16777216 && capped.width >= 4090, `${capped.width}x${capped.height}`);
+  assert.throws(() => rasterSize('<svg width="1000" height="1000000">', { pixelRatio: 2 }), /too elongated/);
   const doc = defaultDocument(); doc.points.push({ id: 'p', label: '=1+1', position: { x: 0, y: 0 } });
   const csv = toCsv(doc); assert.match(csv, /'=1\+1/); assert.match(csv, /,-1\.0000,/);
 });

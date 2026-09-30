@@ -53,18 +53,19 @@ export function setupImportPanel({ store, editor, setStatus }) {
     $('entry-review').hidden = true;
     message(isOcr ? 'Recognition complete. Correct the text and column mapping, then preview. Check every measurement against the image.' : 'Choose the format and columns, then preview.');
   }
-  $('bulk-entry').addEventListener('click', () => { $('entry-unit').value = store.document.unit; dialog.showModal(); });
+  $('bulk-entry').addEventListener('click', () => { $('entry-unit').value = store.document.unit; if (!review) message(''); dialog.showModal(); });
   $('entry-close').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => { reads.cancel(); invalidate(); });
+  dialog.addEventListener('close', () => { reads.cancel(); recognized = false; invalidate(); });
   dialog.addEventListener('keydown', event => event.stopPropagation());
-  $('entry-text').addEventListener('input', () => { needsParsing = true; draftRevision++; reads.cancel(); invalidate(); });
+  // Hand-typed text is not recognition output, so it needs no image check.
+  $('entry-text').addEventListener('input', () => { needsParsing = true; draftRevision++; recognized = false; reads.cancel(); invalidate(); });
   for (const id of ['entry-mode', 'entry-unit', 'entry-decimal', 'entry-action', 'entry-delimiter', 'entry-header', 'entry-label-column', 'entry-first-column', 'entry-second-column']) $(id).addEventListener('change', () => {
     if (['entry-delimiter', 'entry-header', 'entry-label-column', 'entry-first-column', 'entry-second-column'].includes(id)) needsParsing = true;
     draftRevision++; invalidate();
   });
   $('entry-review-button').addEventListener('click', () => {
     try {
-      if (needsParsing) rows = parseRows($('entry-text').value, { delimiter: $('entry-delimiter').value.replace('tab', '\t'), header: $('entry-header').checked, columns: ['entry-label-column', 'entry-first-column', 'entry-second-column'].map(id => Number($(id).value) - 1) });
+      if (needsParsing) rows = parseRows($('entry-text').value, { delimiter: $('entry-delimiter').value.replace('tab', '\t'), decimal: $('entry-decimal').value, header: $('entry-header').checked, columns: ['entry-label-column', 'entry-first-column', 'entry-second-column'].map(id => Number($(id).value) - 1) });
       needsParsing = false;
       $('entry-first-heading').textContent = options().mode === 'distances' ? 'From A' : 'Along';
       $('entry-second-heading').textContent = options().mode === 'distances' ? 'From B' : 'Perpendicular';
@@ -86,6 +87,7 @@ export function setupImportPanel({ store, editor, setStatus }) {
       const text = await withTimeout(file.text()); if (current() && dialog.open) acceptText(text);
     } catch (error) { if (current()) message(error.message); }
   });
-  store.subscribe(() => { if (review && store.revision !== revision) { $('entry-apply').disabled = true; message('The plot changed. Preview again before applying.'); } });
+  // Only a plot change while the dialog is open makes a preview stale; applying the preview changes the plot too.
+  store.subscribe(() => { if (dialog.open && review && store.revision !== revision) { $('entry-apply').disabled = true; message('The plot changed. Preview again before applying.'); } });
   return { dialog, acceptText, message, invalidate, get draftRevision() { return draftRevision; } };
 }

@@ -1,6 +1,6 @@
 import { setupQuickEntry } from './quickEntry.js';
 import { validatePointLabel } from './pointNames.js';
-import { printFieldSheet } from './fieldSheet.js';
+import { printFieldSheet, toFieldSheetHtml } from './fieldSheet.js';
 import { setupReviewPanel } from './reviewPanel.js';
 /**
  * Wiring: the store owns the plot, the editor draws it, this module keeps the
@@ -784,6 +784,8 @@ $('export-options-button').addEventListener('click', () => $('export-options').s
 $('export-close').addEventListener('click', () => $('export-options').close());
 $('export-options').addEventListener('keydown', event => event.stopPropagation());
 $('print-field-sheet').addEventListener('click', () => runExport($('print-field-sheet'), () => printFieldSheet(store.document)));
+// Home-screen web apps on iPhone have no print dialog; the same sheet can be saved and printed elsewhere.
+$('download-field-sheet').addEventListener('click', () => runExport($('download-field-sheet'), () => { const filename = exportName('-field-sheet.html'); downloadText(filename, toFieldSheetHtml(store.document), 'text/html'); setStatus(`Download requested: ${filename}.`); }));
 // A save still waiting for the lock is written now; the prompt is only for work that cannot be saved:
 // unapplied fields, or edits held in memory because autosave is paused, failed or unavailable.
 window.addEventListener('beforeunload', event => { store.flush(); if (baselineDirty || quickEntry.hasDraft || reviewPanel.hasDraft || store.hasUnsavedChanges) { event.preventDefault(); event.returnValue = ''; } });

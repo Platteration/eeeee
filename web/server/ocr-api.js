@@ -69,7 +69,7 @@ export function azureProvider({ endpoint, key, fetchImpl = fetch, pollInterval =
   };
 }
 
-export function createOcrHandler({ code, secret, origin, quota, provider, timeout = 60000 } = {}) {
+export function createOcrHandler({ code, secret, origin, quota, provider, timeout = 60000, trustProxy = false } = {}) {
   const enabled = Boolean(code && secret && origin && quota && provider);
   const active = new Set(), attempts = new Map();
   const hmac = text => createHmac('sha256', secret).update(text).digest('hex');
@@ -92,7 +92,10 @@ export function createOcrHandler({ code, secret, origin, quota, provider, timeou
       if (request.method !== 'POST') throw failure(405, 'method', 'Use POST for this operation.');
       if (request.headers.origin !== origin) throw failure(403, 'origin', 'Open this service from the configured ABPlot website.');
       if (path === '/api/ocr/session') {
-        const ip = request.socket.remoteAddress ?? 'unknown', now = Date.now();
+        // Behind the HTTPS reverse proxy every socket is the proxy's; with OCR_TRUST_PROXY the proxy's
+        // appended client address keys the limiter instead, so one visitor cannot lock out the others.
+        const forwarded = trustProxy ? request.headers['x-forwarded-for']?.split(',').pop()?.trim() : null;
+        const ip = forwarded || request.socket.remoteAddress || 'unknown', now = Date.now();
         for (const [key, value] of attempts) if (now - value.start > 15 * 60000) attempts.delete(key);
         if (attempts.size >= 1000 && !attempts.has(ip)) throw failure(429, 'access_limit', 'Too many access attempts. Try again later.');
         const entry = attempts.get(ip) ?? { start: now, count: 0 }; entry.count++; attempts.set(ip, entry);
@@ -100,6 +103,7 @@ export function createOcrHandler({ code, secret, origin, quota, provider, timeou
         let payload;
         try { payload = JSON.parse((await readBody(request, 1024)).toString('utf8')); } catch (error) { if (error instanceof ApiError) throw error; throw failure(400, 'invalid_request', 'Enter the pilot access code.'); }
         if (typeof payload?.code !== 'string' || !equal(hmac(payload.code), hmac(code))) throw failure(401, 'access_code', 'The pilot access code was not accepted.');
+        attempts.delete(ip); // a correct code is not an attack; only failures count toward the limit
         const value = `${randomBytes(16).toString('hex')}.${Date.now() + 8 * 3600000}`;
         send(200, { authenticated: true }, { 'Set-Cookie': `abplot_ocr=${value}.${hmac(value)}; HttpOnly; SameSite=Strict; Path=/api/ocr; Max-Age=28800${origin.startsWith('https:') ? '; Secure' : ''}` });
         return true;
@@ -135,6 +139,6 @@ export function configuredOcr(env = process.env) {
     if (env.OCR_ACCESS_CODE.length < 12 || env.OCR_SESSION_SECRET.length < 32) throw Error('Pilot code or session secret is too short');
     const origin = new URL(env.OCR_PUBLIC_ORIGIN);
     if (origin.origin !== env.OCR_PUBLIC_ORIGIN || (origin.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(origin.hostname))) throw Error('Public origin must use HTTPS');
-    return createOcrHandler({ code: env.OCR_ACCESS_CODE, secret: env.OCR_SESSION_SECRET, origin: origin.origin, quota: dailyQuota(env.OCR_DATA_DIR, Number(env.OCR_DAILY_LIMIT ?? 100)), provider: azureProvider({ endpoint: env.AZURE_OCR_ENDPOINT, key: env.AZURE_OCR_KEY }) });
+    return createOcrHandler({ code: env.OCR_ACCESS_CODE, secret: env.OCR_SESSION_SECRET, origin: origin.origin, quota: dailyQuota(env.OCR_DATA_DIR, Number(env.OCR_DAILY_LIMIT ?? 100)), provider: azureProvider({ endpoint: env.AZURE_OCR_ENDPOINT, key: env.AZURE_OCR_KEY }), trustProxy: env.OCR_TRUST_PROXY === '1' });
   } catch { console.error('Online OCR disabled: check service configuration and the writable usage volume.'); return createOcrHandler(); }
 }

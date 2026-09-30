@@ -54,3 +54,10 @@ test('the chosen side means the same physical side whichever way the baseline is
   assert.ok(place(leftToRight, 'right').y > 400 && place(leftToRight, 'left').y < 400);
   assert.ok(place(rightToLeft, 'right').y < 400 && place(rightToLeft, 'left').y > 400);
 });
+
+test('automatic delimiter detection keeps whitespace rows whole when the decimal separator is a comma', () => {
+  const rows = parseRows('P1 1,50 2,25\nP2 3,00 4,00', { decimal: ',' });
+  assert.deepEqual(rows.map(row => [row.label, row.first, row.second]), [['P1', '1,50', '2,25'], ['P2', '3,00', '4,00']]);
+  assert.deepEqual(parseRows('P1,1.5,2.25').map(row => [row.label, row.first, row.second]), [['P1', '1.5', '2.25']], 'comma rows with a decimal point still split on the comma');
+  assert.deepEqual(parseRows('P1;1,5;2,25', { decimal: ',' }).map(row => row.first), ['1,5'], 'an explicit semicolon wins');
+});

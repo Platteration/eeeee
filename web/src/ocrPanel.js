@@ -1,4 +1,4 @@
-import { loadPhoto, preparePhoto, recognizeLocal, recognizeOnline } from './ocr.js';
+import { apiResult, loadPhoto, preparePhoto, recognizeLocal, recognizeOnline } from './ocr.js';
 import { LatestOperation } from './operations.js';
 
 export function setupOcrPanel(panel) {
@@ -55,8 +55,8 @@ export function setupOcrPanel(panel) {
     try {
       if (remote && $('code').value) {
         const response = await fetch('api/ocr/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('code').value }), signal });
-        $('code').value = '';
-        if (!response.ok) { const result = await response.json(); throw new Error(result.error?.message ?? 'Access code rejected.'); }
+        await apiResult(response, 'Access code rejected.');
+        $('code').value = ''; // only a code that was accepted is cleared; a proxy hiccup keeps it for retry
       }
       const result = await (remote ? recognizeOnline(blob, { signal }) : recognizeLocal(blob, { signal, progress: (status, fraction) => { if (current()) note(`${status} ${Math.round((fraction ?? 0) * 100)}%`); } }));
       if (!current()) return;

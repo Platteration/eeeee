@@ -198,18 +198,24 @@ The **Export** dialog contains:
   shared plot JSON format, without the image. In iOS use **Plot files & name →
   Open plot JSON**. Photo projects currently open only in the web client.
 - **Export CSV:** measurements in the project's units, plus descriptions,
-  remeasurement flags and notes. Text cells are escaped for spreadsheet use.
+  remeasurement flags and notes. Text cells are escaped for spreadsheet use and
+  the file starts with a UTF-8 byte-order mark so Excel keeps accented text.
 - **Export SVG / PNG:** the plan with its ordered outline, point markers, review
   indicators, scale bar and a description key. Optional annotations add offsets.
 - **Print field sheet:** a paper checklist of points in walking order, A/B
   readings, descriptions, reminders and notes, including a flagged baseline.
   The browser print dialog can also save it as PDF. Printing leaves the editor
   and its selection/history intact.
+- **Download field sheet:** the same checklist as a standalone HTML file, for
+  installed home-screen apps that have no print dialog, or to print elsewhere.
 
 Choose **Fit to content** for a picture, or A4/A3/Letter/Tabloid and a drawing
 scale for a measured paper plan. Auto selects a scale that fits the chosen sheet;
 the preview reports whether a manually chosen scale fits. SVG uses physical page
-dimensions, and paper PNG output is rasterized at 300 dpi. Print scaled plans at
+dimensions, and paper PNG output is rasterized at 300 dpi, or at the largest
+density that stays under 16.8 megapixels (A3 and Tabloid: about 295 dpi), which
+is the most a phone browser can draw. Captions and the legend stay 12 mm inside
+the paper edge. Print scaled plans at
 actual size rather than letting the printer shrink them to fit.
 
 ## Tables and OCR
@@ -254,7 +260,8 @@ Older app versions may discard optional fields when saving.
 Ordinary plot imports also accept `{x,y}` coordinates. Invalid or duplicate IDs
 receive unique replacements while valid UUIDs are retained and normalized to
 uppercase. Distances must be JSON numbers. Open project accepts files up to 8 MB;
-measurement text imports have a separate 1 MB limit.
+measurement text imports accept files up to 1 MB and at most 100,000 characters
+(about 3,000 rows; 500 are applied per import).
 
 Photo projects retain `format: "abplot-photo-project"`, `version: 1`, an ordinary
 `document`, and a `photo` with embedded PNG, dimensions, UUID/A/B-keyed pixel

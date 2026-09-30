@@ -35,3 +35,14 @@ test('prepared image sizes never exceed the 4 megapixel budget or a 4000 px side
   assert.deepEqual(preparedSize(1000, 600, scaleFor(1000, 600)), { width: 1000, height: 600 }, 'small images keep their size');
   assert.ok(worst.pixels > MAX_PREPARED_PIXELS * 0.99, `the budget is still used: worst ${worst.size}`);
 });
+
+test('API replies that are not JSON become plain messages instead of parse errors', async () => {
+  const { apiResult } = await import('../src/ocr.js');
+  const reply = (status, body, type) => new Response(body, { status, headers: { 'content-type': type } });
+  await assert.rejects(apiResult(reply(413, '<html>413 Request Entity Too Large</html>', 'text/html'), 'fallback'), /too large for the online service/);
+  await assert.rejects(apiResult(reply(502, '<html>bad gateway</html>', 'text/html'), 'Online recognition failed.'), /^Error: Online recognition failed\.$/);
+  await assert.rejects(apiResult(reply(418, 'teapot', 'text/plain'), 'Nope'), /Nope \(HTTP 418\)/);
+  await assert.rejects(apiResult(reply(401, JSON.stringify({ error: { message: 'Code rejected' } }), 'application/json'), 'fallback'), /Code rejected/);
+  assert.deepEqual(await apiResult(reply(200, JSON.stringify({ text: 'P1 1 2' }), 'application/json; charset=utf-8'), 'fallback'), { text: 'P1 1 2' });
+  await assert.rejects(apiResult(reply(200, 'not json', 'text/html'), 'Unexpected reply'), /Unexpected reply/);
+});

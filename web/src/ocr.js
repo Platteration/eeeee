@@ -62,9 +62,18 @@ export async function recognizeLocal(blob, { signal, progress = () => {}, create
   } finally { cancelled = true; signal?.removeEventListener('abort', stop); if (worker) await worker.terminate(); }
 }
 
+/** Read a JSON API reply; a proxy's HTML error page becomes a plain message instead of a SyntaxError. */
+export async function apiResult(response, fallback) {
+  const json = response.headers.get('content-type')?.includes('json') ? await response.json().catch(() => null) : null;
+  if (!response.ok) {
+    const status = { 413: 'The image is too large for the online service. Crop it further or use local recognition.', 502: fallback, 503: fallback, 504: 'The online service timed out. Try a smaller crop or local recognition.' };
+    throw new Error(json?.error?.message ?? status[response.status] ?? `${fallback} (HTTP ${response.status})`);
+  }
+  if (!json) throw new Error(fallback);
+  return json;
+}
+
 export async function recognizeOnline(blob, { signal } = {}) {
   const response = await fetch('api/ocr', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob, signal });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error?.message ?? 'Online recognition failed. Try again later.');
-  return result;
+  return apiResult(response, 'Online recognition failed. Try again later.');
 }

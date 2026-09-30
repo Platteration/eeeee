@@ -281,3 +281,44 @@ test('declining to discard drafts when opening a project reports the cancelled o
   expect(await page.evaluate(() => window.abplot.store.document.abDistance)).toBe(2);
   await expect(page.locator('#quick-a')).toHaveValue('3');
 });
+
+test('the field sheet can be downloaded as a standalone HTML file with the points listed', async ({ page }) => {
+  await seedThree(page); await page.goto('/');
+  await page.locator('#export-options-button').click();
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download field sheet', exact: true }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('fixes-field-sheet.html');
+  const html = (await (await import('node:fs/promises')).readFile(await download.path())).toString();
+  expect(html).toMatch(/^<!doctype html>/i);
+  expect(html).toContain('Fixes');
+  expect(html).not.toContain('<script');
+  await expect(page.locator('#status')).toContainText('fixes-field-sheet.html');
+});
+
+test('the image-check confirmation applies only to recognised text, and a finished import leaves no stale warning', async ({ page }) => {
+  await page.route('**/api/ocr/config', route => route.fulfill({ json: { enabled: true } }));
+  await page.route('**/api/ocr/session', route => route.fulfill({ json: { authenticated: true } }));
+  await page.route('**/api/ocr', route => route.fulfill({ json: { text: 'P1 1.50 2.25', words: [] } }));
+  await seedBaseline(page); await page.goto('/');
+  const bytes = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 100; return c.toDataURL().split(',')[1]; });
+  await page.locator('#bulk-entry').click(); await page.locator('#entry-mode').selectOption('offsets'); await page.locator('#ocr-panel summary').click();
+  await page.locator('#ocr-file').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(bytes, 'base64') });
+  await page.locator('#ocr-code').fill('pilot-code'); await page.locator('#ocr-online').click();
+  await expect(page.locator('#entry-text')).toHaveValue('P1 1.50 2.25');
+  await expect(page.locator('#ocr-code')).toHaveValue(''); // an accepted code is cleared
+  await page.locator('#entry-review-button').click();
+  await expect(page.locator('#entry-confirmation')).toBeVisible();
+  await expect(page.locator('#entry-apply')).toBeDisabled();
+  // Text typed by hand replaces the recognition result: no image check is demanded.
+  await page.locator('#entry-text').fill('P2 3 3');
+  await page.locator('#entry-review-button').click();
+  await expect(page.locator('#entry-confirmation')).toBeHidden();
+  await expect(page.locator('#entry-apply')).toBeEnabled();
+  await page.locator('#entry-apply').click();
+  await expect(page.locator('#measurements tbody tr')).toHaveCount(1);
+  await page.locator('#bulk-entry').click();
+  await expect(page.locator('#entry-status')).not.toContainText('The plot changed');
+  await expect(page.locator('#entry-confirmation')).toBeHidden();
+  await page.locator('#entry-close').click();
+});

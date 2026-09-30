@@ -73,3 +73,19 @@ test('Azure submission occurs once, polls results and validates operation origin
   const bad = azureProvider({ endpoint: 'https://azure.example', key: 'test', fetchImpl: async () => new Response('', { status: 202, headers: { 'operation-location': 'https://other.example/steal' } }) });
   await assert.rejects(bad(png, new AbortController().signal), /invalid location/);
 });
+
+test('behind a trusted proxy the login limiter keys on the forwarded client and forgives correct codes', async t => {
+  const { request } = await host(t, configured({ trustProxy: true }));
+  const attempt = (client, body) => request('/api/ocr/session', JSON.stringify(body), null, { 'x-forwarded-for': `10.0.0.1, ${client}` });
+  for (let i = 0; i < 5; i++) assert.equal((await attempt('203.0.113.7', { code: 'wrong' })).status, 401);
+  assert.equal((await attempt('203.0.113.7', { code: 'wrong' })).status, 429, 'the sixth failure from one client is limited');
+  assert.equal((await attempt('203.0.113.8', { code })).status, 200, 'another client behind the same proxy is unaffected');
+  for (let i = 0; i < 8; i++) assert.equal((await attempt('203.0.113.9', { code })).status, 200, 'correct codes never accumulate');
+});
+
+test('without trusted-proxy mode the forwarded header is ignored', async t => {
+  const { request } = await host(t, configured());
+  const attempt = client => request('/api/ocr/session', JSON.stringify({ code: 'wrong' }), null, { 'x-forwarded-for': client });
+  for (let i = 0; i < 5; i++) await attempt(`198.51.100.${i}`);
+  assert.equal((await attempt('198.51.100.99')).status, 429, 'all attempts share the socket address bucket');
+});

@@ -4,12 +4,13 @@ import { validateGeometry } from './validation.js';
 import { normalizePointDescription, validatePointLabel } from './pointNames.js';
 
 /** Quoted CSV/TSV, semicolon-separated rows, or whitespace field notes. */
-export function parseRows(text, { delimiter = 'auto', header = false, columns = [0, 1, 2] } = {}) {
+export function parseRows(text, { delimiter = 'auto', decimal = '.', header = false, columns = [0, 1, 2] } = {}) {
   if (text.length > 100000) throw new Error('Paste at most 100,000 characters per import.');
   text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   if (delimiter === 'auto') {
     const first = text.split('\n').find(line => line.trim()) ?? '';
-    delimiter = first.includes('\t') ? '\t' : first.includes(';') ? ';' : first.includes(',') ? ',' : 'space';
+    // With a decimal comma, "P1 1,50 2,25" is three whitespace-separated fields, not five comma-separated ones.
+    delimiter = first.includes('\t') ? '\t' : first.includes(';') ? ';' : first.includes(',') && decimal !== ',' ? ',' : 'space';
   }
   let records = [];
   if (delimiter === 'space') records = text.split('\n').filter(line => line.trim()).map(line => line.trim().split(/\s+/));
