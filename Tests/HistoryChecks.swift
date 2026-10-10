@@ -214,6 +214,21 @@ struct HistoryChecks {
         let escapedCSV = try PlotCSV.string(for: exported)
         precondition(escapedCSV.contains("\"Point, \"\"north\"\"\nline\""))
 
+        // Imported labels must remain text when the native CSV is opened in a spreadsheet.
+        for label in ["=1+1", "+1", "-1", "@SUM(A1)", "  =1+1", "\tplain", "\rplain", "\nplain", "=\"quoted\",text"] {
+            exported.points[0].label = label
+            let safeCSV = try PlotCSV.string(for: exported)
+            let cell = "\"'" + label.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            precondition(safeCSV.contains(cell + ","), "Unsafe CSV label: \(label)")
+            precondition(exported.points[0].label == label, "Export changed the saved label")
+        }
+        for label in ["plain", "O'Brien", "  plain", "1-2", "Point, \"north\"\nline"] {
+            exported.points[0].label = label
+            let plainCSV = try PlotCSV.string(for: exported)
+            let cell = "\"" + label.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            precondition(plainCSV.contains(cell + ","), "Safe label changed: \(label)")
+        }
+
         // Invalid geometry or distance must fail rather than export NaN values.
         exported.abDistance = 0
         do {

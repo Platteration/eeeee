@@ -44,6 +44,13 @@ enum PlotCSV {
     }
 
     private static func quoted(_ text: String) -> String {
-        "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        // CSV quoting escapes delimiters, but spreadsheets still evaluate formulas.
+        // Match the browser exporter, without changing the saved point label.
+        let firstAfterWhitespace = text.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.first?.value
+        let first = text.unicodeScalars.first?.value
+        let formula = firstAfterWhitespace.map { $0 == 61 || $0 == 43 || $0 == 64 || $0 == 45 } ?? false
+        let control = first.map { $0 == 9 || $0 == 10 || $0 == 13 } ?? false
+        let safe = formula || control ? "'" + text : text
+        return "\"" + safe.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }
