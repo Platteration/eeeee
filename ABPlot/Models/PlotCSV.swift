@@ -44,6 +44,12 @@ enum PlotCSV {
     }
 
     private static func quoted(_ text: String) -> String {
-        "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        // CSV quoting escapes delimiters, but spreadsheets still evaluate formulas.
+        // Match the browser exporter, without changing the saved point label.
+        let first = text.trimmingCharacters(in: .whitespacesAndNewlines).first
+        let formula = first.map { "=+@-".contains($0) } ?? false
+        let control = text.first.map { "\t\r\n".contains($0) } ?? false
+        let safe = formula || control ? "'" + text : text
+        return "\"" + safe.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }
