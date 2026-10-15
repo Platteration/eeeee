@@ -30,9 +30,14 @@ test('invalid rows block import until corrected and stale previews are rejected'
 });
 test('two tabs preserve first save and allow the stale plot to be downloaded', async ({ page, context }) => {
   const second = await context.newPage(); await second.goto('/');
+  // The second tab must have read the shared save before the first tab changes it.
+  await expect(second.locator('#startup')).toBeHidden();
   await page.locator('#name').fill('First tab'); await expect(page.locator('#save-status')).toContainText('Saved');
   await second.locator('#name').fill('Other tab'); await expect(second.locator('#save-status')).toContainText('Another tab');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('abplot.web.document.v1')).name)).toBe('First tab');
+  // The paused tab holds edits only in memory, so leaving it must prompt; the saved tab may leave freely.
+  const prompts = page => page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; });
+  expect(await prompts(second)).toBe(true); expect(await prompts(page)).toBe(false);
   const download = second.waitForEvent('download'); await second.locator('#save-project').click(); expect((await download).suggestedFilename()).toBe('other-tab.json');
 });
 test('bad preferences cannot break startup and overflow leaves the plot unchanged', async ({ page }) => {

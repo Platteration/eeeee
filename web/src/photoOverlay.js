@@ -71,7 +71,9 @@ export function parsePhotoProject(text) {
   if (raw?.format !== PHOTO_PROJECT_FORMAT || raw.version !== 1) throw Error('Choose an ABPlot photo project. Regular plot JSON is opened from the main editor.');
   const document = parseDocument(raw.document), p = raw.photo;
   if (!p || typeof p.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(p.dataUrl)) throw Error('The project must contain an embedded PNG photo.');
-  if (![p.width, p.height].every(n => Number.isSafeInteger(n) && n > 0 && n <= 4000) || p.width * p.height > 4000000) throw Error('The project photo dimensions are invalid.');
+  // Prepared photos are at most 4 megapixels; earlier builds rounded each side up to half a pixel,
+  // so files they wrote reach 4,004,000 and must still open.
+  if (![p.width, p.height].every(n => Number.isSafeInteger(n) && n > 0 && n <= 4000) || p.width * p.height > 4004000) throw Error('The project photo dimensions are invalid.');
   if (!p.pins || typeof p.pins !== 'object' || Array.isArray(p.pins)) throw Error('Photo matches are invalid.');
   const ids = new Set(plotLandmarks(document).map(point => point.id)), pins = {};
   for (const [id, point] of Object.entries(p.pins)) {

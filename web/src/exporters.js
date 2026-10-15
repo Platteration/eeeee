@@ -135,12 +135,18 @@ function legendLayout(doc, { paper = null, orientation = 'landscape', width = 10
   return { rows, columnWidth, keyLines, height: height + keyLines.length * 16 + (height || key ? 16 : 0) };
 }
 
-/** Footer reserve in millimetres for paper, or pixels for a fitted image. */
+/** Printers cannot reach the paper's edge; nothing is drawn closer to it than this. */
+export const PAPER_MARGIN_MM = 12;
+
+/**
+ * Footer reserve in millimetres for paper, or pixels for a fitted image: the
+ * name, scale bar, caption and legend block that toSvg draws, so the block
+ * always fits the strip that was reserved for it above the margin.
+ */
 export function planFooterSize(doc, options = {}) {
   const legend = legendLayout(doc, options);
-  return options.paper
-    ? (doc.name?.trim() ? 24 : 16) + legend.height * MM_PER_PX
-    : (doc.name?.trim() ? 108 : 78) + legend.height;
+  const pixels = (doc.name?.trim() ? 108 : 78) + legend.height;
+  return options.paper ? pixels * MM_PER_PX : pixels;
 }
 
 /**
@@ -274,12 +280,15 @@ export function toSvg(
         paper,
         orientation,
         ratio: scale,
-        margin: 12,
+        margin: PAPER_MARGIN_MM,
         footer: planFooterSize(doc, paperOptions),
         annotate,
       });
+  if (paper && scale && planContentSize(doc, { annotate }) === null) {
+    throw new Error('Set an A–B distance and a baseline to draw the plan to scale.');
+  }
   if (paper && scale && (!onPaper || !onPaper.fits)) {
-    throw new Error('The plot and point legend do not fit this sheet at the selected scale. Choose Fit to sheet, a larger sheet, or a fitted SVG.');
+    throw new Error('The plot and point legend do not fit this sheet at the selected scale. Choose Auto scale, a larger sheet, or Fit to content.');
   }
   const layout = onPaper ||
     // Falling back keeps a plot exportable even when it has no scale to print
@@ -293,7 +302,9 @@ export function toSvg(
   // The drawing occupies everything above the footer strip; the grid is built
   // for exactly that region and clipped to it so it cannot run under the
   // scale bar and caption.
-  const plotArea = { x: viewBox.x, y: viewBox.y, w: viewBox.w, h: viewBox.h - layout.footerPx * px };
+  // On paper the footer strip sits above the bottom margin, not on the sheet edge.
+  const marginPx = layout.scale ? PAPER_MARGIN_MM / MM_PER_PX : 0;
+  const plotArea = { x: viewBox.x, y: viewBox.y, w: viewBox.w, h: viewBox.h - (layout.footerPx + marginPx) * px };
   const grid = showGrid ? abGrid(doc, plotArea, 40 * px) : null;
   const footer = layout.footerPx;
   const parts = [];
@@ -381,7 +392,7 @@ export function toSvg(
 
   // Footer: scale bar on the left, summary on the right, both in output pixels
   // mapped back into canvas units so they sit at a fixed size on the page.
-  const footerY = viewBox.y + viewBox.h - (footer - 30) * px;
+  const footerY = viewBox.y + viewBox.h - (footer + marginPx) * px + 30 * px;
   const left = viewBox.x + padding * px;
   const extent = plotExtent(doc);
   const abMeters = abDistanceMeters(doc);
@@ -448,6 +459,8 @@ export function downloadText(filename, text, type) {
   downloadBlob(filename, new Blob([text], { type: `${type};charset=utf-8` }));
 }
 
+export const CANVAS_AREA_LIMIT = 16777216;
+
 export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -456,9 +469,10 @@ export function downloadBlob(filename, blob) {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  // Revoking immediately can cancel the download in some browsers; one turn of
-  // the event loop is enough for the click to have been consumed.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // Revoking immediately can cancel the download. iOS Safari asks "Do you want to
+  // download?" and only reads the blob once the user answers, so keep the URL
+  // alive for a minute rather than one turn of the event loop.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 export function downloadJson(doc, filename = 'plot.json') {
@@ -466,7 +480,8 @@ export function downloadJson(doc, filename = 'plot.json') {
 }
 
 export function downloadCsv(doc, filename = 'plot-measurements.csv') {
-  downloadText(filename, toCsv(doc), 'text/csv');
+  // The byte-order mark makes Excel read the file as UTF-8, keeping accented descriptions intact.
+  downloadText(filename, `\uFEFF${toCsv(doc)}`, 'text/csv');
 }
 
 export function downloadSvg(doc, { filename = 'plot.svg', ...options } = {}) {
@@ -493,9 +508,15 @@ export function rasterSize(markup, { pixelRatio, dpi }) {
   if (!Number.isFinite(factor) || factor <= 0) {
     throw new Error(`Cannot rasterize at ${unit === 'mm' ? `${dpi} dpi` : `a pixel ratio of ${pixelRatio}`}`);
   }
-  const result = { width: Math.round(Number(width) * factor), height: Math.round(Number(height) * factor) };
-  if (!Object.values(result).every(n => Number.isSafeInteger(n) && n > 0 && n <= 16384) || result.width * result.height > 24000000) {
-    throw new Error('PNG exceeds the 24 megapixel limit. Choose a paper sheet or export SVG.');
+  // iOS Safari refuses 2D canvases above 16,777,216 pixels (4096² equivalent), so A3 and
+  // Tabloid at 300 dpi would fail or come out blank there. Scale the density down to fit.
+  const requested = Number(width) * Number(height) * factor * factor;
+  const capped = requested > CANVAS_AREA_LIMIT;
+  const effective = capped ? factor * Math.sqrt(CANVAS_AREA_LIMIT / requested) : factor;
+  const size = (n) => (capped ? Math.floor(n * effective) : Math.round(n * effective));
+  const result = { width: size(Number(width)), height: size(Number(height)) };
+  if (!Object.values(result).every(n => Number.isSafeInteger(n) && n > 0 && n <= 16384)) {
+    throw new Error('This plot is too elongated to rasterize as a PNG. Export SVG instead.');
   }
   return result;
 }

@@ -19,6 +19,9 @@ npm test           # pure Node unit tests
 ```
 
 Use an HTTP server, not a file:// URL: browser ES modules require an HTTP origin.
+Serving from a sub-path (for example GitHub Pages at `https://user.github.io/eeeee/`)
+works: assets, the optional API probe and the service worker resolve relative to
+the page.
 Opening the dev server from a phone on the same network (`http://<computer-ip>:8000`)
 is a plain-HTTP origin, and browsers provide the lock manager only on secure origins
 (HTTPS, or `localhost` on the machine itself). Autosave still writes there, and the
@@ -41,6 +44,10 @@ entry, photo matching and local OCR without service credentials.
    problems and candidates to inspect.
 4. Optionally switch to **Photo**, choose an image, and match the same points to
    their visible locations. Both existing-point and click-first workflows work.
+
+The side of a measured point is chosen as **left** or **right of A→B, facing B
+from A**, the same side you would name standing at A and looking toward B. It
+does not depend on which way the baseline happens to be drawn on the plan.
 5. **Save project** downloads an editable copy of the current work, including
    an attached photo. **Export** provides printable output and a plot-only file
    for the iPhone app.
@@ -111,7 +118,8 @@ Changing units converts the displayed distance while preserving physical scale
 and point positions: 2 m becomes about 6.562 ft.
 
 Along / Perp. offsets follow the direction A→B rather than the screen axes.
-Positive perpendicular is the canvas-down side of A→B. Offsets cannot be edited
+Positive perpendicular is the right-hand side of A→B when facing B from A; that is
+the canvas-down side only while B is drawn to the right of A. Offsets cannot be edited
 as physical measurements until a positive A–B distance is set.
 
 ## Photos
@@ -144,6 +152,23 @@ Photos are processed locally and normalized to PNG up to four megapixels. The
 photo feature does not upload them. **Export overlaid PNG / SVG** shares the
 annotated image; **Save project** retains the editable measurements and matches.
 
+## Offline use and installing
+
+After one complete load over HTTPS (or from `localhost`), the editor opens
+without a network connection: a service worker (`sw.js`) keeps the last fully
+loaded copy of the editor's own files. While online, every load fetches fresh
+files exactly as before, so a new release is picked up on the next online load
+without any prompt. Local text recognition needs its model, which downloads on
+the first recognition and is then kept until the pinned recognition packages
+change. Plots and photo projects are never part of these caches; they live in
+localStorage and IndexedDB as described below, and an incomplete first load
+means the next online load is needed before offline use works.
+
+Browsers that support it offer **Add to Home Screen** / **Install** from the
+web app manifest. An installed copy on iPhone has its own browser storage,
+separate from Safari's tabs, so save a project file before switching between
+the two. Plain-HTTP origins get neither offline copies nor installation.
+
 ## Save, recover, export and print
 
 **Save project** chooses the existing file format appropriate to the current
@@ -173,18 +198,24 @@ The **Export** dialog contains:
   shared plot JSON format, without the image. In iOS use **Plot files & name →
   Open plot JSON**. Photo projects currently open only in the web client.
 - **Export CSV:** measurements in the project's units, plus descriptions,
-  remeasurement flags and notes. Text cells are escaped for spreadsheet use.
+  remeasurement flags and notes. Text cells are escaped for spreadsheet use and
+  the file starts with a UTF-8 byte-order mark so Excel keeps accented text.
 - **Export SVG / PNG:** the plan with its ordered outline, point markers, review
   indicators, scale bar and a description key. Optional annotations add offsets.
 - **Print field sheet:** a paper checklist of points in walking order, A/B
   readings, descriptions, reminders and notes, including a flagged baseline.
   The browser print dialog can also save it as PDF. Printing leaves the editor
   and its selection/history intact.
+- **Download field sheet:** the same checklist as a standalone HTML file, for
+  installed home-screen apps that have no print dialog, or to print elsewhere.
 
 Choose **Fit to content** for a picture, or A4/A3/Letter/Tabloid and a drawing
 scale for a measured paper plan. Auto selects a scale that fits the chosen sheet;
 the preview reports whether a manually chosen scale fits. SVG uses physical page
-dimensions, and paper PNG output is rasterized at 300 dpi. Print scaled plans at
+dimensions, and paper PNG output is rasterized at 300 dpi, or at the largest
+density that stays under 16.8 megapixels (A3 and Tabloid: about 295 dpi), which
+is the most a phone browser can draw. Captions and the legend stay 12 mm inside
+the paper edge. Print scaled plans at
 actual size rather than letting the printer shrink them to fit.
 
 ## Tables and OCR
@@ -229,7 +260,8 @@ Older app versions may discard optional fields when saving.
 Ordinary plot imports also accept `{x,y}` coordinates. Invalid or duplicate IDs
 receive unique replacements while valid UUIDs are retained and normalized to
 uppercase. Distances must be JSON numbers. Open project accepts files up to 8 MB;
-measurement text imports have a separate 1 MB limit.
+measurement text imports accept files up to 1 MB and at most 100,000 characters
+(about 3,000 rows; 500 are applied per import).
 
 Photo projects retain `format: "abplot-photo-project"`, `version: 1`, an ordinary
 `document`, and a `photo` with embedded PNG, dimensions, UUID/A/B-keyed pixel
@@ -259,11 +291,14 @@ protection, explicit editing modes, touch cancellation, OCR, photo projection,
 whole-project open/save/undo, recovery and narrow layouts. Check the final commit's
 CI for the complete result rather than relying on an earlier test count.
 
-`npm run build` writes an allowlisted `web/dist/` package with local OCR assets
-and license notices. A prepared package is not a public deployment. Serve it over
-HTTPS without an SPA fallback; missing paths must remain 404. Run
-`npm run smoke -- https://your-site.example` against the deployed origin. See
-[RELEASE.md](../RELEASE.md) for launch gates, rollback and iOS signing steps.
+`npm run build` writes an allowlisted `web/dist/` package with local OCR assets,
+the web app manifest, icons, the service worker and license notices. A prepared
+package is not a public deployment. Serve it over HTTPS without an SPA fallback;
+missing paths must remain 404. Run `npm run smoke -- https://your-site.example`
+(a sub-path base such as `https://user.github.io/eeeee/` is fine) against the
+deployed origin. Pushes to the default branch deploy to GitHub Pages through
+`.github/workflows/deploy-pages.yml`. See [RELEASE.md](../RELEASE.md) for launch
+gates, rollback and iOS signing steps.
 
 Future work, outside this focused web release: a project library, a deliberate
 offline-install/cache strategy, direct-manipulation OCR cropping and image/table

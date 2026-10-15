@@ -14,6 +14,30 @@ optional metadata; its new native UI is outside this web release.
 
 ## Website launch
 
+### GitHub Pages (built in)
+
+The repository deploys the web app to GitHub Pages by itself. Every push to the
+default branch that touches `web/` runs `.github/workflows/deploy-pages.yml`:
+unit tests, the static build, the release-file check, the deployment, and then
+the smoke probe against the published URL. It can also be started by hand from
+the Actions tab (**Deploy web app to GitHub Pages → Run workflow**).
+
+One-time setup by a repository administrator: **Settings → Pages → Build and
+deployment → Source: GitHub Actions**. The workflow asks GitHub to enable Pages
+on its first run; if that is refused, make the setting above and re-run it. The
+site then lives at `https://<owner>.github.io/<repository>/`; the package works
+from that sub-path (relative asset, API and worker paths) as well as from an
+origin root, and the smoke probe resolves its checks against whichever base URL
+it is given.
+
+What GitHub Pages does not give you: response headers (no Content Security
+Policy, no `Cache-Control: no-cache`; Pages serves everything with a ten-minute
+cache), so a user can briefly mix two releases right after a deployment. The
+optional online OCR service is not available on Pages. Roll back by re-running
+the last good deployment run, or by reverting the commit.
+
+### Any other static host
+
 1. Use a commit whose web and iOS GitHub Actions checks are green. Download its
    **abplot-static-site** artifact from the Web editor tests run, or run:
 
@@ -25,15 +49,19 @@ optional metadata; its new native UI is outside this web release.
    ```
 
 2. Upload the contents of `web/dist/` to an HTTPS static host. Serve index.html
-   at the root, JS as JavaScript, CSS as CSS, `.wasm` as application/wasm, and
-   model `.gz` files as downloadable binary (do not transparently unzip them).
-   Preserve paths and filename case. Missing paths must return 404; disable SPA
-   fallback rewrites. Never publish the repository root or `.env` files.
+   at the root, JS as JavaScript, CSS as CSS, `.wasm` as application/wasm,
+   `manifest.webmanifest` as `application/manifest+json`, and model `.gz` files
+   as downloadable binary (do not transparently unzip them). Serve `sw.js` from
+   the same directory as index.html: it is the offline service worker and its
+   scope is that directory. Preserve paths and filename case. Missing paths must
+   return 404; disable SPA fallback rewrites. Never publish the repository root
+   or `.env` files.
 3. Use revalidation (`Cache-Control: no-cache`) for HTML and application JS/CSS
    to avoid mixing releases. The bundle uses relative asset paths, but hosting
    at a dedicated origin root is simplest. Configure HTTPS before testing saved
    projects and browser APIs. Retain the previous artifact for rollback.
-4. Run `npm run smoke -- https://YOUR-HOST` from `web/` against the public URL.
+4. Run `npm run smoke -- https://YOUR-HOST` (or `https://YOUR-HOST/sub-path/`)
+   from `web/` against the public URL.
 5. On the deployed origin, manually run this short acceptance pass:
    - Start a fresh project, verify no measured baseline is assumed, enter a known
      A–B distance, preview and apply it. Add points with Add & next, including a
@@ -67,6 +95,14 @@ optional metadata; its new native UI is outside this web release.
      review, and import it. Check that local OCR contacts only this site.
    - Repeat the essentials on a real phone. Downloaded files and camera/photo
      permissions can differ from browser automation.
+   - Offline: load the site once over HTTPS, turn on airplane mode, reload, and
+     confirm the editor opens with the saved plot. Local text recognition works
+     offline only after it has run once online (the model downloads on first
+     use). Add the site to the home screen and check Save project from the
+     installed app: home-screen apps on iPhone keep their own browser storage,
+     separate from Safari's, so a plot saved in Safari is not visible there.
+   - Turn the phone to landscape and check that Measure, Points and Checks stay
+     reachable and scroll; collapsing the panel should give the plan the height.
 6. Read the data/privacy page with the actual hosting operator. Add its contact
    channel and hosting-specific data practices before a public release.
 

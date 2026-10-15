@@ -38,19 +38,17 @@ enum PlotCSV {
             // Double's string representation is locale-independent and retains
             // small measurements without rounding them to zero.
             let numbers = values.map { $0 == 0 ? "0" : String($0) }
-            rows.append(([quoted(label)] + numbers + [quoted(document.unit.symbol)]).joined(separator: ","))
+            rows.append(([quoted(label, escapingFormulas: true)] + numbers + [quoted(document.unit.symbol)]).joined(separator: ","))
         }
         return rows.joined(separator: "\r\n") + "\r\n"
     }
 
-    private static func quoted(_ text: String) -> String {
-        // CSV quoting escapes delimiters, but spreadsheets still evaluate formulas.
-        // Match the browser exporter, without changing the saved point label.
-        let firstAfterWhitespace = text.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.first?.value
-        let first = text.unicodeScalars.first?.value
-        let formula = firstAfterWhitespace.map { $0 == 61 || $0 == 43 || $0 == 64 || $0 == 45 } ?? false
-        let control = first.map { $0 == 9 || $0 == 10 || $0 == 13 } ?? false
-        let safe = formula || control ? "'" + text : text
-        return "\"" + safe.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    /// Text cells are quoted. A label that a spreadsheet would evaluate as a formula
+    /// (leading =, +, -, @, tab or carriage return, after any spaces) gets a leading
+    /// apostrophe, as the web editor's CSV does, so an imported label cannot run anything.
+    private static func quoted(_ text: String, escapingFormulas: Bool = false) -> String {
+        let first = text.drop(while: { $0 == " " }).first
+        let guarded = escapingFormulas && first.map({ "=+-@\t\r".contains($0) }) == true ? "'" + text : text
+        return "\"" + guarded.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }

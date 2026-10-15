@@ -8,7 +8,8 @@ FROM node:24-bookworm-slim
 ENV NODE_ENV=production PORT=8000 OCR_DATA_DIR=/data
 WORKDIR /app
 COPY --from=build /build/vendor ./vendor
-COPY index.html styles.css privacy.html ./
+COPY index.html styles.css privacy.html manifest.webmanifest sw.js ./
+COPY icons ./icons
 COPY src ./src
 COPY server ./server
 COPY tools/serve.js ./tools/serve.js

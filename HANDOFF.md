@@ -9,7 +9,9 @@ combines both Claude platform branches and the subsequent Codex work:
   rotation, measurement imports/OCR, history and portable plot files.
 
 Both histories are retained. Info.plist keeps Files sharing/open-in-place support.
-Web and iOS CI run for PRs and pushes to this handoff branch. Continue from this
+Web and iOS CI run for PRs and for pushes to the default branch
+(`claude/ios-ab-plotting-ar-232m3z`) and this handoff branch; pushes to the
+default branch also deploy the web app to GitHub Pages. Continue from this
 branch so work on either platform remains included. A static package is prepared
 for deployment; packaging and green unsigned iOS builds do not publish a website
 or distribute an app. Follow [RELEASE.md](RELEASE.md) for launch gates.
@@ -144,8 +146,11 @@ Next focused follow-ups after this release:
 1. Test actual pool photos, field sheets and mobile downloads with users on site.
 2. Add a deliberate project library only after learning which saved-project
    organization users need; browser recovery is not a project manager.
-3. Design offline install/cache updates explicitly, including model assets and
-   version rollback. Do not imply a complete offline guarantee from local OCR.
+3. Offline install now exists (`web/sw.js`, `web/manifest.webmanifest`):
+   network-first app shell, cache-first pinned OCR assets keyed by package
+   version, nothing cached from the optional API. Remaining: an explicit
+   "download recognition for offline use" action, and a visible offline
+   indicator. Do not imply a complete offline guarantee from local OCR.
 4. Improve OCR crop manipulation and side-by-side source/table review; gather
    representative handwriting samples before making accuracy claims.
 5. Add native iOS description/reminder UI and, separately, photo-project support.

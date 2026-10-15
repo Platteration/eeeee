@@ -1,7 +1,7 @@
 import { photoRecovery } from './photoRecovery.js';
 import { loadPhoto, preparePhoto } from './ocr.js';
 import { withTimeout, LatestOperation } from './operations.js';
-import { changeUnit, fileStem, nextLabel, parseDocument, serializeDocument } from './plotDocument.js';
+import { changeUnit, fileStem, newId, nextLabel, parseDocument, serializeDocument } from './plotDocument.js';
 import { pointDisplayName, normalizePointDescription } from './pointNames.js';
 import { reviewMeasurements } from './measurementImport.js';
 import { downloadBlob, downloadText } from './exporters.js';
@@ -25,7 +25,7 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
       <label>Plot units <select id="photo-unit"><option value="meters">Meters</option><option value="feet">Feet</option></select></label>
       <label>Match workflow <select id="photo-mode"><option value="match">Match an existing point</option><option value="new">Click, then enter A/B distances</option></select></label>
       <div id="photo-match-controls"><label class="checkbox"><input id="photo-next" type="checkbox" checked /> Advance to the next unmatched point</label><button id="photo-unmatch" type="button">Remove selected match</button></div>
-      <form id="photo-measure-form" hidden><p id="photo-pending-note">Choose Match, then click the photo where you took a measurement.</p><label>Point number or code <input id="photo-label" type="text" maxlength="40" required /></label><label>Description (optional) <input id="photo-description" type="text" maxlength="120" placeholder="Deep-end corner" /></label><label>Distance from A <input id="photo-from-a" type="text" inputmode="decimal" required /></label><label>Distance from B <input id="photo-from-b" type="text" inputmode="decimal" required /></label><label>Side in the measured plan <select id="photo-side"><option value="above">Above A→B</option><option value="below">Below A→B</option></select></label><p class="note">Side refers to the measured plan, not the photo's vertical direction.</p><p id="photo-measure-status" role="status"></p><button id="photo-draft-reset" type="button" hidden>Review with current reference</button><button id="photo-add-measured" type="submit" disabled>Add measured point here</button></form>
+      <form id="photo-measure-form" hidden><p id="photo-pending-note">Choose Match, then click the photo where you took a measurement.</p><label>Point number or code <input id="photo-label" type="text" maxlength="40" required /></label><label>Description (optional) <input id="photo-description" type="text" maxlength="120" placeholder="Deep-end corner" /></label><label>Distance from A <input id="photo-from-a" type="text" inputmode="decimal" required /></label><label>Distance from B <input id="photo-from-b" type="text" inputmode="decimal" required /></label><label>Side in the measured plan <select id="photo-side"><option value="left">Left of A→B (facing B)</option><option value="right">Right of A→B (facing B)</option></select></label><p class="note">Side refers to the measured plan, not the photo's vertical direction.</p><p id="photo-measure-status" role="status"></p><button id="photo-draft-reset" type="button" hidden>Review with current reference</button><button id="photo-add-measured" type="submit" disabled>Add measured point here</button></form>
       <details><summary>Overlay appearance</summary><fieldset><legend>Overlay appearance</legend><label>Opacity <input id="photo-opacity" type="range" min="0" max="1" step="0.05" value="0.9" /></label><label class="checkbox"><input id="photo-labels" type="checkbox" checked /> Point labels</label><label class="checkbox"><input id="photo-distances" type="checkbox" /> A/B measurements</label><label class="checkbox"><input id="photo-outline" type="checkbox" checked /> Connect points in plot order</label><label class="checkbox"><input id="photo-closed" type="checkbox" checked /> Close the pool outline</label><label class="checkbox"><input id="photo-project" type="checkbox" /> Project unmatched points</label><p class="note">Perspective projection needs four or more well-spaced matches on the same plane, such as the pool rim. It does not reconstruct depth or measure distances from the photo.</p></fieldset></details>
       <div class="button-grid"><button id="photo-save-project" type="button">Save project</button><button id="photo-export-png" type="button">Export overlaid PNG</button><button id="photo-export-svg" type="button">Export overlaid SVG</button><button id="photo-remove" type="button">Remove photo</button></div>
       <p id="photo-save-note" class="note">Save project includes the photo, matches and measured plot.</p>
@@ -47,7 +47,8 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
   // open project continues that project, and a file from disk starts a new one.
   const RECOVERY_KEEP = 2, lineage = new Map(), writtenRecords = new Set();
   const projectOf = id => lineage.get(id) ?? id;
-  function mintRecovery(project = null) { const id = crypto.randomUUID(); lineage.set(id, project ?? id); return id; }
+  // newId falls back when crypto.randomUUID is missing: it is a secure-context API, absent on plain-HTTP LAN origins.
+  function mintRecovery(project = null) { const id = newId(); lineage.set(id, project ?? id); return id; }
   const note = text => { $('status').textContent = text; };
   function setRecoveryStatus(next) { recoveryStatus = next; $('recovery-status').textContent = next.message; onRecoveryStatus(next); }
   async function listRecoveries() {
@@ -212,14 +213,17 @@ export function setupPhotoPanel({ store, editor, onOpen = () => {}, onClose = ()
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     if (arrows[event.key] && $('tool').value === 'move' && photo.pins[selected]) {
       event.preventDefault(); const [x, y] = arrows[event.key], delta = event.shiftKey ? 10 : 1;
-      store.applyProject(project => { const p = project.photo.pins[selected]; p.x = Math.max(0, Math.min(photo.width, p.x + x * delta)); p.y = Math.max(0, Math.min(photo.height, p.y + y * delta)); });
+      // One undo step per nudged match, as in the plan editor; key repeat must not flood the history.
+      store.applyProject(project => { const p = project.photo.pins[selected]; p.x = Math.max(0, Math.min(photo.width, p.x + x * delta)); p.y = Math.max(0, Math.min(photo.height, p.y + y * delta)); }, { historyGroup: `photo-nudge:${selected}` });
     }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? store.redo() : store.undo(); }
   });
   new ResizeObserver(() => { if (!workspace.hidden && photo) render(); }).observe(svg);
   workspace.addEventListener('keydown', event => {
     if (event.key === 'Escape') { $('tool').value = 'select'; $('tool').dispatchEvent(new Event('change')); event.preventDefault(); }
-    event.stopPropagation();
+    // Photo keys stay here, but the shared undo/redo shortcuts reach the document handler
+    // whatever control has focus, exactly as they do in the plan workspace.
+    const history = (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase());
+    if (!history) event.stopPropagation();
   });
   function open() { workspace.hidden = false; onOpen(); render(); void listRecoveries(); }
   function cancelOpen() { reads.cancel(); loading = false; cancelPointer(); }

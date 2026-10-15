@@ -293,3 +293,47 @@ describe('planContentSize', () => {
     assert.equal(planContentSize({ ...doc, abDistance: 0 }), null);
   });
 });
+
+describe('paper output respects the printer margin and the phone canvas limit', () => {
+  const clearanceMm = (svg) => {
+    const heightMm = Number(svg.match(/height="([\d.]+)mm"/)[1]);
+    const [, , y, , h] = svg.match(/viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/).map(Number);
+    const ys = [...svg.matchAll(/<text[^>]* y="([-\d.]+)"/g)].map(match => Number(match[1]));
+    return Math.min(...ys.map(value => (y + h - value) * (heightMm / h)));
+  };
+  const described = { ...doc, points: doc.points.map(point => ({ ...point, description: 'Steps beside the deep-end handrail, long north wall'.repeat(2) })) };
+
+  it('keeps every caption, scale label and legend line at least 12 mm above the paper edge', () => {
+    for (const plot of [doc, { ...doc, name: 'Named survey' }, described, { ...described, name: 'Named with legend' }]) {
+      for (const paper of ['a4', 'a3', 'letter']) {
+        for (const orientation of ['landscape', 'portrait']) {
+          const svg = toSvg(plot, { paper, orientation });
+          assert.ok(clearanceMm(svg) >= 12, `${plot.name || 'unnamed'} on ${paper} ${orientation}: lowest text ${clearanceMm(svg).toFixed(2)} mm from the edge`);
+          assert.match(svg, /1:\d+/);
+        }
+      }
+    }
+  });
+
+  it('still measures true to scale after the footer moved', () => {
+    const svg = toSvg(doc, { paper: 'a4', orientation: 'landscape', scale: 100 });
+    const perUnit = Number(svg.match(/width="([\d.]+)mm"/)[1]) / Number(svg.match(/viewBox="[-\d.]+ [-\d.]+ ([\d.]+)/)[1]);
+    assert.ok(Math.abs(perUnit * 200 - 40) < 0.01);
+  });
+
+  it('caps large sheets at the WebKit canvas area while keeping A4 at 300 dpi', async () => {
+    const { CANVAS_AREA_LIMIT } = await import('../src/exporters.js');
+    assert.deepEqual(rasterSize(toSvg(doc, { paper: 'a4' }), { pixelRatio: 2, dpi: 300 }), { width: 3508, height: 2480 });
+    for (const paper of ['a3', 'tabloid']) {
+      const size = rasterSize(toSvg(doc, { paper, orientation: 'landscape' }), { pixelRatio: 2, dpi: 300 });
+      assert.ok(size.width * size.height <= CANVAS_AREA_LIMIT, `${paper}: ${size.width}x${size.height}`);
+      assert.ok(size.width * size.height > CANVAS_AREA_LIMIT * 0.98, `${paper} keeps nearly the full density`);
+    }
+    assert.throws(() => rasterSize('<svg width="1" height="20000" viewBox="0 0 1 20000"></svg>', { pixelRatio: 2, dpi: 300 }), /too elongated/);
+  });
+
+  it('names the missing distance when a fixed scale is chosen on an unscaled plot', () => {
+    assert.throws(() => toSvg({ ...doc, abDistance: 0 }, { paper: 'a4', scale: 100 }), /Set an A–B distance/);
+    assert.doesNotThrow(() => toSvg({ ...doc, abDistance: 0 }, { paper: 'a4' }));
+  });
+});

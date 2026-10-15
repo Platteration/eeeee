@@ -10,6 +10,9 @@
     />
     <link rel="icon" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"%3E%3Crect width="32" height="32" rx="7" fill="%230a84ff"/%3E%3Cpath d="M7 22 L25 10" stroke="%23ffffff" stroke-width="2" stroke-dasharray="3 2"/%3E%3Ccircle cx="7" cy="22" r="4" fill="%2334c759"/%3E%3Ccircle cx="25" cy="10" r="4" fill="%23ff3b30"/%3E%3C/svg%3E' />
     <link rel="stylesheet" href="styles.css" />
+    <meta name="theme-color" content="#0a84ff" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/abplot-180.png" />
   </head>
   <body>
     <section id="startup" role="status"><p id="startup-message">Starting ABPlot… If this message stays visible, check your connection and reload the page.</p><button id="startup-retry" type="button" hidden>Reload editor</button><noscript>JavaScript must be enabled to use the editor.</noscript></section>
@@ -54,7 +57,7 @@
       </aside>
     </main>
     <dialog id="export-options" aria-labelledby="export-title"><div class="section-head"><h2 id="export-title">Export &amp; print</h2><button id="export-close" type="button">Close</button></div><p>Save project keeps your work editable. Choose an export for printing, sharing, or opening measurements on your iPhone.</p>
-      <div class="button-grid"><button id="export-json" type="button">Export plot for iPhone</button><button id="export-csv" type="button">Export CSV</button><button id="export-svg" type="button">Export SVG</button><button id="export-png" type="button">Export PNG</button><button id="print-field-sheet" type="button">Print field sheet</button></div>
+      <div class="button-grid"><button id="export-json" type="button">Export plot for iPhone</button><button id="export-csv" type="button">Export CSV</button><button id="export-svg" type="button">Export SVG</button><button id="export-png" type="button">Export PNG</button><button id="print-field-sheet" type="button">Print field sheet</button><button id="download-field-sheet" type="button">Download field sheet</button></div>
       <div class="field-row"><label for="sheet">Plan sheet</label><select id="sheet"><option value="">Fit to content</option><option value="a4-landscape">A4 landscape</option><option value="a4-portrait">A4 portrait</option><option value="a3-landscape">A3 landscape</option><option value="a3-portrait">A3 portrait</option><option value="letter-landscape">Letter landscape</option><option value="letter-portrait">Letter portrait</option><option value="tabloid-landscape">Tabloid landscape</option></select><select id="plan-scale" aria-label="Drawing scale" disabled><option value="">Auto</option><option value="20">1:20</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option><option value="1000">1:1000</option></select></div><p id="sheet-note" class="note"></p><label class="checkbox"><input id="annotate" type="checkbox" /> Add measurements to the plan drawing</label><p class="note">The iPhone plot export contains measurements, descriptions and notes. Use Save project to include your photo.</p><button id="reset" type="button">New project</button>
     </dialog>
     <dialog id="measurement-import" aria-labelledby="entry-title">
@@ -75,7 +78,7 @@
         <label>Along / A column <input id="entry-first-column" type="number" min="1" max="30" value="2" /></label>
         <label>Perpendicular / B column <input id="entry-second-column" type="number" min="1" max="30" value="3" /></label>
       </div>
-      </details><p class="note">Offsets: positive perpendicular is the canvas-down side of A→B. For A/B distances, choose the side for each row in the review. A and B keep their current scale and positions.</p>
+      </details><p class="note">Offsets: positive perpendicular is the right-hand side of A→B, facing B from A. For A/B distances, choose that side for each row in the review. A and B keep their current scale and positions.</p>
       <button id="entry-review-button" type="button">Preview measurements</button>
       <p id="entry-status" role="status" aria-live="polite"></p>
       <section id="entry-review" hidden>

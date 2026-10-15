@@ -11,7 +11,7 @@
  *
  *     d = p - a;  D = b - a;  L2 = D.x^2 + D.y^2
  *     s = (d.x*D.x + d.y*D.y) / L2        // fraction along A->B (A = 0, B = 1)
- *     t = (d.x*-D.y + d.y*D.x) / L2       // perpendicular fraction; + = canvas-down side
+ *     t = (d.x*-D.y + d.y*D.x) / L2       // perpendicular fraction; + = right-hand side facing B from A
  *
  * `(s, t)` is dimensionless (units of AB-lengths), so it survives panning,
  * zooming and resizing the canvas untouched -- only geometry relative to A and
@@ -75,7 +75,8 @@ export function hasValidBaseline(a, b) {
 
 /**
  * Real-world offsets of a point from A, in meters: `along` the A->B direction
- * and perpendicular to it (`perp`) (positive on the canvas-down side of A->B).
+ * and perpendicular to it (`perp`) (positive on the right-hand side facing B from A,
+ * which is canvas-down only while B is drawn to the right of A).
  *
  * These are exactly the local x and z the iOS app hands to RealityKit, so a
  * measurement read here is the position you will see standing in AR.

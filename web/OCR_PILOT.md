@@ -25,6 +25,7 @@ Supply these environment variables through your host's secret configuration:
 | `OCR_PUBLIC_ORIGIN` | Exact website origin, e.g. `https://plots.example.com`, no trailing slash |
 | `OCR_DATA_DIR` | Writable persistent directory; container defaults to `/data` |
 | `OCR_DAILY_LIMIT` | Shared image limit per UTC day; default 100 |
+| `OCR_TRUST_PROXY` | Set to `1` when a reverse proxy appends the client address to `X-Forwarded-For`; the login limiter then keys on that address instead of the proxy's |
 
 Generate a signing secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
 Use independent values for the access code and signing secret. Rotating the signing
@@ -40,9 +41,13 @@ cancelled requests still use that slot because Azure may already have billed the
 request. There is no automatic resubmission. Preserve the `/data` volume across
 restarts. Do not share it among concurrent replicas. The code caps one request
 per session and four active requests overall, with a 60-second processing deadline.
-Only prepared PNGs up to 4 MB / 4 megapixels are accepted. Login attempts are
-limited to five per remote address per 15 minutes; behind a reverse proxy this
-address may be shared, so pilot administrators should account for that limit.
+Only prepared PNGs up to 4 MB / 4 megapixels are accepted. Failed login attempts are
+limited to five per client address per 15 minutes (a correct code clears the
+count). Behind a reverse proxy set `OCR_TRUST_PROXY=1` and make the proxy append
+the client address to `X-Forwarded-For`; otherwise every visitor shares the
+proxy's address and one bucket. The proxy must also allow 4 MB request bodies
+and keep its read timeout above the 60-second recognition deadline, or users see
+its error page instead of the pilot's message.
 
 The application does not save uploaded images or recognized text on the server,
 or include them in logs. Azure's own service retention and processing policies
