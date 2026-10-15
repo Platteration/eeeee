@@ -201,3 +201,50 @@ describe('save recovery', () => {
     assert.equal(store.saveError, null);
   });
 });
+
+describe('gesture persistence', () => {
+  it('writes a drag once and keeps it as one undo step', () => {
+    let writes = 0;
+    const storage = fakeStorage();
+    const original = storage.setItem;
+    storage.setItem = (key, value) => { writes++; original(key, value); };
+    const store = new Store({ document: withPoint(), storage });
+    store.begin();
+    for (const x of [15, 25, 35]) store.mutate((d) => { d.points[0].position.x = x; });
+    assert.equal(writes, 0);
+    assert.equal(store.isEditing, true);
+    store.end();
+    assert.equal(writes, 1);
+    assert.equal(store.isEditing, false);
+    store.undo();
+    assert.equal(store.document.points[0].position.x, 10);
+    assert.equal(store.canUndo, false);
+  });
+  it('finishes an in-flight drag before a discrete edit or undo', () => {
+    const store = new Store({ document: withPoint() });
+    store.begin();
+    store.mutate((d) => { d.points[0].position.x = 80; });
+    store.apply((d) => { d.abDistance = 7; });
+    store.undo();
+    assert.equal(store.document.abDistance, 2);
+    assert.equal(store.document.points[0].position.x, 80);
+    store.undo();
+    assert.equal(store.document.points[0].position.x, 10);
+    store.begin();
+    store.mutate((d) => { d.points[0].position.x = 90; });
+    store.undo();
+    assert.equal(store.document.points[0].position.x, 10);
+    assert.equal(store.isEditing, false);
+  });
+  it('notifies the UI when a drag returns to its original position', () => {
+    const store = new Store({ document: withPoint() });
+    let editing;
+    store.subscribe(() => { editing = store.isEditing; });
+    store.begin();
+    store.mutate((d) => { d.points[0].position.x = 30; });
+    store.mutate((d) => { d.points[0].position.x = 10; });
+    store.end();
+    assert.equal(editing, false);
+    assert.equal(store.canUndo, false);
+  });
+});

@@ -305,6 +305,37 @@ deployed origin. Pushes to the default branch deploy to GitHub Pages through
 `.github/workflows/deploy-pages.yml`. See [RELEASE.md](../RELEASE.md) for launch
 gates, rollback and iOS signing steps.
 
-Future work, outside this focused web release: a project library, a deliberate
-offline-install/cache strategy, direct-manipulation OCR cropping and image/table
-review, and native iOS UI for descriptions, review reminders and photo projects.
+```
+index.html          markup and the panel's static chrome
+styles.css          light and dark themes
+src/
+  plotMath.js       pure geometry; the twin of PlotMath.swift
+  plotDocument.js   document shape, defaults, JSON parsing and serializing
+  measurements.js   the numbers behind the table
+  grid.js           baseline-aligned grid lines, shared by canvas and export
+  paper.js          sheet sizes, drawing scales, and which one fits
+  format.js         lengths, units, and "nice" round steps
+  store.js          state, selection, undo history, autosave
+  editor.js         the SVG canvas: rendering, pan, zoom, pointer editing
+  exporters.js      JSON, CSV, SVG and PNG output
+  app.js            wiring
+test/               node:test suites for every module above
+tools/serve.js      dependency-free static server for `npm start`
+```
+
+Everything except `editor.js`, `app.js` and the `download*` helpers is free of
+the DOM, which is why the suite runs in plain Node with nothing installed.
+
+## Browser regression checks
+
+The runtime still has no dependencies or build step. Development-only browser
+checks use Playwright; `npm test` runs the pure Node tests without an install.
+To run the browser suite, use `npm ci`, `npx playwright install`, then
+`npm run test:browser`. CI runs Chromium, Firefox, and mobile WebKit, covering
+keyboard deletion, coordinate entry and tab order, native text undo, canceled
+touches, interrupted drag recovery, JSON import/export, CSV/SVG/PNG downloads,
+failed-save retry, and the narrow layout.
+
+Dragging saves once on release or interruption, and remains one Undo step.
+Canceled touches and Shift-clicks do not create points. Canvas markers have
+44-pixel hit areas at every zoom, and touch-device form controls are larger.

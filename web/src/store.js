@@ -67,6 +67,7 @@ export class Store {
 
   get recoveryText() { return this.#recoveryText; }
   get hasSaved() { return this.#hasSaved; }
+  get isEditing() { return this.#pending !== null; }
   get needsRecovery() { return this.#loadError !== null; }
 
   retrySaving(storage = this.#storage, { replaceUnreadable = false } = {}) {
@@ -105,15 +106,10 @@ export class Store {
   }
 
   /** Apply `mutate(draft)` as one undoable edit. */
-  apply(mutate, options = {}) {
-    return this.applyProject(project => mutate(project.document), options);
-  }
-
-  /** Update document and photo together, retaining image assets by reference. */
-  applyProject(mutate, { historyGroup = null } = {}) {
+  apply(mutate) {
     this.end();
-    const before = this.#snapshot();
-    const draft = this.#snapshot();
+    const before = clone(this.#doc);
+    const draft = clone(this.#doc);
     mutate(draft);
     validateGeometry(draft.document);
     if (this.#same(before, draft)) { if (historyGroup !== this.#historyGroup) this.#historyGroup = null; return; }
@@ -134,8 +130,7 @@ export class Store {
   /** Start a gesture whose intermediate states should not enter the history. */
   begin() {
     this.end();
-    this.#historyGroup = null;
-    this.#pending = this.#snapshot();
+    this.#pending = clone(this.#doc);
   }
 
   /** Apply a frame of an in-progress gesture. */
@@ -145,7 +140,6 @@ export class Store {
     mutate(draft);
     validateGeometry(draft);
     this.#doc = draft;
-    this.#revision++;
     this.#changed(false);
   }
 
@@ -154,7 +148,7 @@ export class Store {
     const before = this.#pending;
     this.#pending = null;
     if (!before) return;
-    if (this.#same(before, this.#snapshot())) {
+    if (JSON.stringify(before) === JSON.stringify(this.#doc)) {
       this.#changed(false);
       return;
     }
@@ -186,7 +180,6 @@ export class Store {
 
   undo() {
     this.end();
-    this.#historyGroup = null;
     if (!this.canUndo) return;
     this.#redo.push(this.#snapshot());
     const snapshot = this.#undo.pop();
@@ -196,7 +189,6 @@ export class Store {
 
   redo() {
     this.end();
-    this.#historyGroup = null;
     if (!this.canRedo) return;
     this.#undo.push(this.#snapshot());
     const snapshot = this.#redo.pop();

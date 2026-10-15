@@ -71,10 +71,6 @@ export class PlotEditor extends EventTarget {
     svg.addEventListener('contextmenu', (event) => event.preventDefault());
     window.addEventListener('blur', () => this.finishGesture());
     window.addEventListener('pagehide', () => this.finishGesture());
-    // A pointer whose pointerup or pointercancel never reached this element (a finger lifted over
-    // another control after its captured target was re-rendered) must not linger in #pointers,
-    // or every later single touch would count as the second finger of a pinch.
-    for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, this.#onStrayPointerEnd);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.finishGesture();
     });
@@ -193,12 +189,7 @@ export class PlotEditor extends EventTarget {
 
     if (event.button === 1 || event.shiftKey || !role) {
       this.#gesture = { kind: 'background', pointerId: event.pointerId, start, moved: false,
-        panOnly: event.button === 1 || event.shiftKey || this.#mode !== 'add' };
-      return;
-    }
-
-    if (this.#mode !== 'move') {
-      this.#gesture = { kind: 'select', pointerId: event.pointerId, start, moved: false, id: target.dataset.id, reference: target.dataset.handle };
+        panOnly: event.button === 1 || event.shiftKey };
       return;
     }
 
@@ -339,6 +330,22 @@ export class PlotEditor extends EventTarget {
     if (this.#gesture?.pointerId === event.pointerId) { this.finishGesture(); return; }
     this.#pointers.delete(event.pointerId);
     if (this.#pinch?.ids.includes(event.pointerId)) this.#pinch = null;
+  };
+
+  /** Finish a move without interpreting interruption as a tap or deselection. */
+  finishGesture() {
+    const ids = [...this.#pointers.keys()];
+    this.#gesture = null;
+    this.#pinch = null;
+    this.#pointers.clear();
+    this.#store.end();
+    for (const id of ids) {
+      if (this.#svg.hasPointerCapture(id)) this.#svg.releasePointerCapture(id);
+    }
+  }
+
+  #onPointerCancel = (event) => {
+    if (this.#pointers.has(event.pointerId)) this.finishGesture();
   };
 
   /**
@@ -509,7 +516,6 @@ export class PlotEditor extends EventTarget {
         'data-id': point.id,
         class: `${selected ? 'point selected' : 'point'}${point.needsRemeasure ? ' needs-remeasure' : ''}${this.#reviewWarnings.has(point.id) ? ' order-warning' : ''}`,
       });
-      group.append(el('title', {}, `${point.label}${point.needsRemeasure ? ' · needs remeasurement' : ''}${point.description ? ` · ${point.description}` : ''}${point.note ? ` · ${point.note}` : ''}`));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r: 22 * px,
         fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: point.position.x, cy: point.position.y, r, class: 'point-dot' }));
@@ -548,7 +554,7 @@ export class PlotEditor extends EventTarget {
       ['A', doc.pointA],
       ['B', doc.pointB],
     ]) {
-      const group = el('g', { 'data-role': 'handle', 'data-handle': name, class: `handle handle-${name}${doc.baselineNeedsRemeasure ? ' needs-remeasure' : ''}` });
+      const group = el('g', { 'data-role': 'handle', 'data-handle': name, class: `handle handle-${name}` });
       group.append(el('circle', { cx: position.x, cy: position.y, r: 22 * px,
         fill: 'transparent', 'pointer-events': 'all', 'data-hit-target': '' }));
       group.append(el('circle', { cx: position.x, cy: position.y, r, class: 'handle-dot' }));

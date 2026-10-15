@@ -251,8 +251,8 @@ function measureInput(row, column, text) {
       setStatus(`“${entered}” is not a distance.`, 'error');
       return;
     }
-    if (moveTo(row, column.key, typed)) committedValue = input.value;
-    else { input.value = text; input.setAttribute('aria-invalid', 'true'); }
+    committedValue = input.value;
+    moveTo(row, column.key, typed);
   };
   input.addEventListener('change', commit);
   input.addEventListener('blur', commit);
@@ -274,7 +274,7 @@ function moveTo(row, key, value) {
   // A previous cell may have committed before the next animation frame draws
   // its replacement. Always preserve the other coordinate from current state.
   const current = measurePoints(doc).find((point) => point.id === row.id);
-  if (!current) return false;
+  if (!current) return;
   const offsets = { along: current.along, perp: current.perp, [key]: toMeters(value, doc.unit) };
   const position = positionForOffsets(doc, offsets);
   if (!position) { setStatus('These measurements are outside the supported range.', 'error'); return false; }
@@ -413,7 +413,7 @@ function scheduleTableRender() {
 
 function render() {
   const doc = store.document;
-  ui.saveStatus.textContent = store.saveError ?? (store.hasSaved
+  ui.saveStatus.textContent = store.saveError ?? (store.isEditing ? 'Editing… saves when you release the point.' : store.hasSaved
     ? 'Saved in this browser. Export JSON for a portable backup.' : 'Autosave ready. Export JSON for a portable backup.');
   ui.saveStatus.dataset.tone = store.saveError ? 'error' : 'ok';
   ui.retrySave.hidden = !store.saveError;
@@ -513,26 +513,6 @@ ui.recovery.addEventListener('click', () => {
   link.download = 'plot-recovery.json';
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  setStatus('Recovery download requested. When you have saved it, choose Replace previous autosave to resume saving.');
-});
-
-ui.retrySave.addEventListener('click', () => {
-  if (store.hasConflict) {
-    const hadPhoto = Boolean(photoPanel.photo);
-    if (!window.confirm(`Load the latest saved plot? Download your current version first if you need to keep it. This resets undo history${hadPhoto ? ' and detaches the attached photo; its browser recovery copy stays under Photo → Recover work from this browser' : ''}.`)) return;
-    try {
-      store.loadLatest(); photoPanel.close(); showWorkspace('plan'); editor.fit();
-      setStatus(hadPhoto ? 'Loaded the latest save. The photo was detached; open its recovery copy from Photo → Recover work from this browser.' : 'Loaded the latest save.');
-    } catch (error) { setStatus(error.message, 'error'); }
-    return;
-  }
-  if (store.needsRecovery && !window.confirm('Replace the unreadable previous autosave with the current plot? Download its recovery copy first if you need to keep it.')) return;
-  store.retrySaving(availableStorage(), { replaceUnreadable: true });
-});
-ui.recovery.addEventListener('click', () => {
-  if (store.recoveryText === null) return;
-  try { downloadText('plot-recovery.json', store.recoveryText, 'application/json'); }
-  catch (error) { setStatus(`Could not download recovery: ${error.message}`, 'error'); return; }
   setStatus('Recovery download requested. When you have saved it, choose Replace previous autosave to resume saving.');
 });
 
@@ -699,7 +679,6 @@ document.addEventListener('keydown', (event) => {
     store.redo();
     return;
   }
-  if (event.key === 'Escape') { editor.setMode('select'); store.select(null); return; }
   // Arrow keys, Space and Enter on native buttons belong to those controls.
   if (target instanceof HTMLElement && target.closest('button, a')) return;
 
