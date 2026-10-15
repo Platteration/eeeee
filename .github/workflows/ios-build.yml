@@ -16,6 +16,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Show Xcode version
         run: xcodebuild -version
+      - name: Check editor behavior and coordinate exports
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/Models/PlotMath.swift ABPlot/Models/PlotCSV.swift ABPlot/ViewModels/PlotViewModel.swift Tests/HistoryChecks.swift -o "$RUNNER_TEMP/history-checks"
+          "$RUNNER_TEMP/history-checks"
+      - name: Check AR measurement and rotation controls
+        run: |
+          xcrun swiftc -parse-as-library ABPlot/Models/PlotModel.swift ABPlot/AR/ARPlotSession.swift Tests/ARSessionChecks.swift -o "$RUNNER_TEMP/ar-session-checks"
+          "$RUNNER_TEMP/ar-session-checks"
       - name: Build for iOS Simulator
         run: >-
           xcodebuild -project ABPlot.xcodeproj

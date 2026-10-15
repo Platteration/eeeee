@@ -23,11 +23,34 @@ see [RELEASE.md](RELEASE.md).
 - Enter the real-world A–B distance and pick meters or feet in the bottom bar.
   This distance defines the scale of the whole plot.
 - The plot autosaves and is restored on relaunch.
+  In-progress drags also save when the app becomes inactive. If a save fails,
+  an editor message stays visible with **Retry save** until saving succeeds.
 - Switching between meters and feet converts the distance, preserving the
   real-world scale. Use **Done** above the decimal keyboard to finish editing.
 - The editor explains what is needed before entering AR: a positive distance,
   separated A/B handles, and at least one plotted point.
 - **Clear all points** asks for confirmation and keeps A, B, and the distance.
+- Use **Plot options → Fit plot to screen** to bring A, B, and all plotted
+  points into view after opening a plot on a smaller screen. This preserves
+  proportions and the declared distance, autosaves, and supports Undo.
+- Points and reference handles have larger touch targets; new points and drags
+  stay inset from the canvas edges so their handles remain reachable.
+- **Undo** and **Redo** recover point additions, deletions, whole drags, clearing,
+  and distance/unit edits. External keyboards support Command-Z and
+  Shift-Command-Z. The last 100 edits are available during the current session;
+  the restored plot autosaves, but history starts fresh on relaunch.
+
+### Export coordinates
+- Choose **Plot options → Export coordinates (CSV)** and save to Files.
+  Add a plotted point and a valid A–B baseline/distance to enable export.
+- The CSV includes A, B, and every numbered point in the selected meters/feet
+  unit. `along_ab` measures from A toward B; `perpendicular_screen_down` is
+  positive on the canvas-down side of A→B. Both can be negative.
+- `distance_from_a` and `distance_from_b` are straight-line distances to the
+  references. These are calculated from your sketch and declared A–B distance,
+  not measured by the AR camera. Fitting the canvas does not change them.
+- Numeric fields use a decimal point, regardless of the phone's locale. Import
+  the file as comma-separated data if your spreadsheet expects a different delimiter.
 
 ### Scan measurement tables (OCR)
 - Choose **Plot options → Scan measurements**, then take a photo or select an

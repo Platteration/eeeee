@@ -8,9 +8,6 @@ final class PlotViewModel: ObservableObject {
     @Published var selectedPointID: UUID?
     @Published private(set) var saveError: String?
 
-    @Published private(set) var recoveryRequired = false
-    @Published private(set) var recoveryFileName: String?
-
     private let saveURL: URL
     private var nextLabelNumber: Int
     private struct Snapshot: Equatable {
@@ -21,29 +18,18 @@ final class PlotViewModel: ObservableObject {
     @Published private var undoHistory: [Snapshot] = []
     @Published private var redoHistory: [Snapshot] = []
     private let historyLimit = 100
-    /// Consecutive saves sharing a token (typing a name) extend one undo step
-    /// instead of adding one per keystroke, as the web editor groups input.
-    private var historyGroup: UUID?
 
     init(saveURL: URL? = nil) {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let resolvedURL = saveURL ?? documents.appendingPathComponent("plot.json")
         self.saveURL = resolvedURL
-        var loaded: PlotDocument?
-        var loadFailure = false
-        do {
-            loaded = try PlotJSON.decode(Data(contentsOf: resolvedURL))
-        } catch {
-            // A missing first-run file is expected; unreadable existing data is not.
-            let nsError = error as NSError
-            loadFailure = !(nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoSuchFileError)
+        let loaded = (try? Data(contentsOf: resolvedURL)).flatMap {
+            try? JSONDecoder().decode(PlotDocument.self, from: $0)
         }
         let doc = loaded ?? .default
         self.doc = doc
-        nextLabelNumber = Self.nextLabel(in: doc)
+        nextLabelNumber = (doc.points.compactMap { Int($0.label) }.max() ?? 0) + 1
         savedSnapshot = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
-        recoveryRequired = loadFailure
-        if loadFailure { saveError = "The previous save could not be opened. It has been preserved. Back it up before saving this plot." }
     }
 
     var canUndo: Bool { !undoHistory.isEmpty }
@@ -51,7 +37,6 @@ final class PlotViewModel: ObservableObject {
 
     func undo() {
         save() // Finish any in-flight drag before navigating history.
-        historyGroup = nil
         guard let previous = undoHistory.popLast() else { return }
         redoHistory.append(savedSnapshot)
         restore(previous)
@@ -59,7 +44,6 @@ final class PlotViewModel: ObservableObject {
 
     func redo() {
         save()
-        historyGroup = nil
         guard let next = redoHistory.popLast() else { return }
         undoHistory.append(savedSnapshot)
         restore(next)
@@ -112,60 +96,6 @@ final class PlotViewModel: ObservableObject {
 
     func endDrag() {
         save()
-    }
-
-    /// The review flow supplies a fully validated document. Record replacement
-    /// as one edit so Undo restores every prior point, reference, and unit.
-    func importMeasurements(_ document: PlotDocument) {
-        doc = document
-        selectedPointID = nil
-        nextLabelNumber = Self.nextLabel(in: document)
-        save()
-    }
-
-    /// Scanned or typed measurements replace the geometry only. The plot's name
-    /// and its review metadata from the web editor have no native UI yet, so a
-    /// replacement built from a table must not silently drop them.
-    func replaceMeasurements(with document: PlotDocument) {
-        var replacement = document
-        replacement.name = doc.name
-        replacement.baselineNote = doc.baselineNote
-        replacement.baselineNeedsRemeasure = doc.baselineNeedsRemeasure
-        replacement.outlineDirection = doc.outlineDirection
-        importMeasurements(replacement)
-    }
-
-    private static func nextLabel(in document: PlotDocument) -> Int {
-        let highest = document.points.compactMap { Int($0.label) }.filter { $0 > 0 }.max() ?? 0
-        if highest < Int.max { return highest + 1 }
-        let used = Set(document.points.map(\.label))
-        var candidate = 1
-        while used.contains(String(candidate)) { candidate += 1 }
-        return candidate
-    }
-
-    /// Pass the same `historyGroup` for every keystroke of one editing session
-    /// so the whole name is one undo step; pass nil to commit and end the group.
-    func setName(_ name: String, historyGroup: UUID? = nil) {
-        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
-        doc.name = trimmed.isEmpty ? nil : trimmed
-        save(historyGroup: historyGroup)
-    }
-
-    /// Never overwrite an unreadable autosave until its bytes have a durable copy.
-    func preserveRecoveryAndSave() {
-        guard recoveryRequired else { retrySaving(); return }
-        do {
-            let previous = try Data(contentsOf: saveURL)
-            let backup = saveURL.deletingLastPathComponent()
-                .appendingPathComponent("plot-recovery-\(UUID().uuidString).json")
-            try previous.write(to: backup, options: .atomic)
-            recoveryFileName = backup.lastPathComponent
-            recoveryRequired = false
-            persist()
-        } catch {
-            saveError = "Could not preserve the previous save. It is still untouched. Export the current plot using Plot files & name."
-        }
     }
 
     func retrySaving() {
@@ -240,27 +170,22 @@ final class PlotViewModel: ObservableObject {
         save()
     }
 
-    private func save(historyGroup group: UUID? = nil) {
+    private func save() {
         let current = Snapshot(document: doc, nextLabelNumber: nextLabelNumber)
         guard current != savedSnapshot else {
-            if group != historyGroup { historyGroup = nil }
             if saveError != nil { persist() }
             return
         }
-        if group == nil || group != historyGroup {
-            undoHistory.append(savedSnapshot)
-            if undoHistory.count > historyLimit {
-                undoHistory.removeFirst(undoHistory.count - historyLimit)
-            }
+        undoHistory.append(savedSnapshot)
+        if undoHistory.count > historyLimit {
+            undoHistory.removeFirst(undoHistory.count - historyLimit)
         }
         redoHistory.removeAll()
-        historyGroup = group
         savedSnapshot = current
         persist()
     }
 
     private func persist() {
-        guard !recoveryRequired else { return }
         do {
             let data = try PlotJSON.encode(doc)
             try data.write(to: saveURL, options: .atomic)

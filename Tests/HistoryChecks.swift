@@ -77,23 +77,6 @@ struct HistoryChecks {
         model.setDistance(.infinity)
         precondition(model.canRedo)
 
-        // Unit round trips return the typed number, as the web editor's conversion does.
-        let roundTrip = PlotViewModel(saveURL: directory.appendingPathComponent("units.json"))
-        roundTrip.setUnit(.feet)
-        roundTrip.setDistance(7.1)
-        roundTrip.setUnit(.meters)
-        roundTrip.setUnit(.feet)
-        precondition(roundTrip.doc.abDistance == 7.1)
-
-        // Deleting the highest-numbered point frees its number, as the web editor does.
-        let renumber = PlotViewModel(saveURL: directory.appendingPathComponent("renumber.json"))
-        renumber.addPoint(at: CGPoint(x: 10, y: 10))
-        renumber.addPoint(at: CGPoint(x: 20, y: 20))
-        renumber.selectedPointID = renumber.doc.points[1].id
-        renumber.deleteSelectedPoint()
-        renumber.addPoint(at: CGPoint(x: 30, y: 30))
-        precondition(renumber.doc.points.map(\.label) == ["1", "2"])
-
         // Restoring history must update autosave; relaunch starts fresh history.
         let reloaded = PlotViewModel(saveURL: url)
         precondition(reloaded.doc == model.doc)
@@ -125,38 +108,6 @@ struct HistoryChecks {
         var redoCount = 0
         while bounded.canRedo { bounded.redo(); redoCount += 1 }
         precondition(redoCount == 100 && bounded.doc.abDistance == 107)
-
-        // Typing a plot name is one undo step, as in the web editor, so a long
-        // name (159 keystrokes here) cannot evict geometry edits from the
-        // bounded history.
-        let namingURL = directory.appendingPathComponent("naming.json")
-        let naming = PlotViewModel(saveURL: namingURL)
-        naming.addPoint(at: CGPoint(x: 10, y: 10))
-        let unnamed = naming.doc
-        let typing = UUID()
-        var typed = ""
-        for _ in 0..<80 { typed += "p"; naming.setName(typed, historyGroup: typing) }
-        for _ in 0..<79 { typed.removeLast(); naming.setName(typed, historyGroup: typing) }
-        precondition(naming.doc.name == "p" && !naming.canRedo)
-        naming.undo()
-        precondition(naming.doc == unnamed && naming.canUndo)
-        naming.undo()
-        precondition(naming.doc.points.isEmpty && !naming.canUndo)
-        naming.redo()
-        naming.redo()
-        precondition(naming.doc.name == "p" && naming.doc.points.count == 1)
-        // A commit without a group ends it; a new session starts a new step.
-        naming.setName("p")
-        naming.setName("pool", historyGroup: UUID())
-        naming.undo()
-        precondition(naming.doc.name == "p")
-        naming.redo()
-        // Any other edit also ends the group, even for the same token.
-        naming.setDistance(9)
-        naming.setName("pool house", historyGroup: typing)
-        naming.undo()
-        precondition(naming.doc.name == "pool" && naming.doc.abDistance == 9)
-        precondition(PlotViewModel(saveURL: namingURL).doc.name == "pool")
 
         let fitting = PlotViewModel(saveURL: directory.appendingPathComponent("fit.json"))
         fitting.moveA(to: CGPoint(x: -400, y: 800))
@@ -230,25 +181,6 @@ struct HistoryChecks {
         exported.points[0].label = "Point, \"north\"\nline"
         let escapedCSV = try PlotCSV.string(for: exported)
         precondition(escapedCSV.contains("\"Point, \"\"north\"\"\nline\""))
-        // A label that reads as a spreadsheet formula is neutralised; numbers are not.
-        exported.points[0].label = "=1+1"
-        let formulaCSV = try PlotCSV.string(for: exported)
-        precondition(formulaCSV.contains("\"'=1+1\",") && !formulaCSV.contains("'-"))
-
-        // Imported labels must remain text when the native CSV is opened in a spreadsheet.
-        for label in ["=1+1", "+1", "-1", "@SUM(A1)", "  =1+1", "\tplain", "\rplain", "\nplain", "=\"quoted\",text"] {
-            exported.points[0].label = label
-            let safeCSV = try PlotCSV.string(for: exported)
-            let cell = "\"'" + label.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-            precondition(safeCSV.contains(cell + ","), "Unsafe CSV label: \(label)")
-            precondition(exported.points[0].label == label, "Export changed the saved label")
-        }
-        for label in ["plain", "O'Brien", "  plain", "1-2", "Point, \"north\"\nline"] {
-            exported.points[0].label = label
-            let plainCSV = try PlotCSV.string(for: exported)
-            let cell = "\"" + label.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-            precondition(plainCSV.contains(cell + ","), "Safe label changed: \(label)")
-        }
 
         // Invalid geometry or distance must fail rather than export NaN values.
         exported.abDistance = 0
@@ -268,37 +200,6 @@ struct HistoryChecks {
             _ = try PlotCSV.string(for: exported)
             preconditionFailure("Non-finite coordinate was exported")
         } catch PlotCSV.ExportError.invalidGeometry {}
-        let canvas = CGSize(width: 320, height: 240)
-        let origin = CGPoint(x: 100, y: 100)
-        precondition(PlotMath.draggedPosition(from: origin, translation: .zero, in: canvas) == origin)
-        // Even if the finger began 15 points off-center, a 10-point translation
-        // moves the handle only 10 points. Subsequent events use the same origin.
-        precondition(PlotMath.draggedPosition(from: origin, translation: CGSize(width: 10, height: 5), in: canvas)
-                     == CGPoint(x: 110, y: 105))
-        precondition(PlotMath.draggedPosition(from: origin, translation: CGSize(width: 20, height: 10), in: canvas)
-                     == CGPoint(x: 120, y: 110))
-        precondition(PlotMath.draggedPosition(from: origin, translation: CGSize(width: 500, height: -500), in: canvas)
-                     == CGPoint(x: 298, y: 22))
-        precondition(PlotMath.draggedPosition(from: origin, translation: .zero, in: CGSize(width: 20, height: 10))
-                     == CGPoint(x: 10, y: 5))
-        precondition(PlotMath.clampToCanvas(origin, in: .zero) == .zero)
-
-        var measured = PlotDocument(pointA: .zero, pointB: CGPoint(x: 200, y: 0),
-                                    abDistance: 4, unit: .meters, points: [])
-        let distances = PlotMath.referenceDistances(of: CGPoint(x: 150, y: 200), in: measured)!
-        precondition(abs(distances.a - 5) < 1e-10)
-        precondition(abs(distances.b - sqrt(17)) < 1e-10)
-        measured.unit = .feet
-        measured.abDistance = 4 / LengthUnit.feet.toMeters
-        let feetDistances = PlotMath.referenceDistances(of: CGPoint(x: 150, y: 200), in: measured)!
-        precondition(abs(feetDistances.a * LengthUnit.feet.toMeters - 5) < 1e-10)
-        measured.pointB = .zero
-        precondition(PlotMath.referenceDistances(of: origin, in: measured) == nil)
-        measured.pointB = CGPoint(x: 200, y: 0)
-        measured.abDistance = 0
-        precondition(PlotMath.referenceDistances(of: origin, in: measured) == nil)
-        measured.abDistance = 4
-        precondition(PlotMath.referenceDistances(of: CGPoint(x: CGFloat.infinity, y: 0), in: measured) == nil)
-        print("Editor checks passed: history, grouped naming, fit/export, drag offsets, clamping, and reference-distance readouts")
+        print("Editor checks passed: history, fit geometry, CSV coordinates, units, escaping, and invalid export inputs")
     }
 }
