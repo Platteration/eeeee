@@ -9,7 +9,7 @@ import { setupReviewPanel } from './reviewPanel.js';
 
 import { Store } from './store.js';
 import { PlotEditor } from './editor.js';
-import { changeUnit, defaultDocument, fileStem, UNITS } from './plotDocument.js';
+import { changeUnit, createPoint, defaultDocument, fileStem, parseDocument, UNITS } from './plotDocument.js';
 import {
   isMeasurable,
   measurePoints,
@@ -136,7 +136,11 @@ function renderScale(doc) {
         : 'Enter the real-world distance between A and B to scale the plot.';
     return;
   }
-  ui.scaleNote.textContent = `Reference set to ${formatLength(doc.abDistance * UNITS[doc.unit].toMeters, doc.unit)}. Changing units keeps the same physical distances.`;
+  const perUnit = metersPerCanvasUnit(doc);
+  const unitsPerOne = 1 / (perUnit / UNITS[doc.unit].toMeters);
+  ui.scaleNote.textContent =
+    `1 ${symbol} = ${unitsPerOne.toFixed(1)} canvas units · baseline ${canvasABLength(doc.pointA, doc.pointB).toFixed(0)} units. ` +
+    `Switching units converts the distance and keeps the same physical scale.`;
 }
 
 /**
@@ -409,14 +413,11 @@ function scheduleTableRender() {
 
 function render() {
   const doc = store.document;
-  const photoSave = photoPanel?.recoveryStatus;
-  const failure = store.saveError ?? (photoSave?.state === 'error' ? photoSave.message : null);
-  ui.saveStatus.textContent = failure ?? (store.isSaving || photoSave?.state === 'saving' ? 'Saving browser recovery…' : store.isEditing ? 'Editing… saves when you release.' : photoPanel?.photo && photoSave?.state !== 'saved' ? 'Photo recovery pending. Save project for a portable copy.' : store.hasSaved ? 'Saved in this browser · Save project for a portable copy.' : 'Ready · Save project for a portable copy.');
-  // Advice, not a failure: it stays beside every ordinary status for as long as the origin lacks a lock manager.
-  if (!failure && store.saveWarning) ui.saveStatus.textContent += ` ${store.saveWarning}`;
-  ui.saveStatus.dataset.tone = failure ? 'error' : 'ok';
+  ui.saveStatus.textContent = store.saveError ?? (store.hasSaved
+    ? 'Saved in this browser. Export JSON for a portable backup.' : 'Autosave ready. Export JSON for a portable backup.');
+  ui.saveStatus.dataset.tone = store.saveError ? 'error' : 'ok';
   ui.retrySave.hidden = !store.saveError;
-  ui.retrySave.textContent = store.hasConflict ? 'Load latest save…' : store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
+  ui.retrySave.textContent = store.needsRecovery ? 'Replace previous autosave…' : 'Retry save';
   ui.recovery.hidden = store.recoveryText === null;
   renderScale(doc);
   scheduleTableRender();
@@ -457,10 +458,8 @@ async function importFile(file) {
   $('cancel-file').hidden = false;
   setStatus(`Reading ${file.name}…`);
   try {
-    const opened = await photoPanel.openProject(file);
-    if (opened && current()) { baselineDirty = false; editor.setMode('select'); render(); setStatus(`Imported ${file.name}. Undo restores the previous project.`); }
-    else if (current()) setStatus('Open cancelled. The current project is unchanged.');
-
+    if (file.size > 5 * 1024 * 1024) throw new Error('Choose a plot JSON file smaller than 5 MB');
+    loadDocument(parseDocument(await file.text()), `Imported ${file.name}. Undo restores the previous plot.`);
   } catch (error) {
     if (current()) setStatus(`Could not import ${file.name}: ${error.message}`, 'error');
   } finally {
@@ -498,10 +497,23 @@ $('baseline-reset').addEventListener('click', () => { baselineDirty = false; ui.
 
 ui.unit.addEventListener('change', () => {
   const unit = ui.unit.value;
-  try {
-    store.apply(draft => changeUnit(draft, unit));
-  } catch (error) { renderScale(store.document); setStatus(error.message, 'error'); }
-  previewBaseline();
+  try { store.apply((draft) => changeUnit(draft, unit)); }
+  catch (error) { renderScale(store.document); setStatus(error.message, 'error'); }
+});
+
+ui.retrySave.addEventListener('click', () => {
+  if (store.needsRecovery && !window.confirm('Replace the unreadable previous autosave with the current plot? Download its recovery copy first if you need to keep it.')) return;
+  store.retrySaving(availableStorage(), { replaceUnreadable: true });
+});
+ui.recovery.addEventListener('click', () => {
+  if (store.recoveryText === null) return;
+  const url = URL.createObjectURL(new Blob([store.recoveryText], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'plot-recovery.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  setStatus('Recovery download requested. When you have saved it, choose Replace previous autosave to resume saving.');
 });
 
 ui.retrySave.addEventListener('click', () => {
@@ -568,9 +580,9 @@ async function runExport(button, action) {
 ui.exportJson.addEventListener('click', () => runExport(ui.exportJson, () => {
   const filename = exportName('.json');
   downloadJson(store.document, filename);
-  setStatus(`Download requested: ${filename}. In the updated iOS app, choose Plot files & name → Open plot JSON.`);
-}));
-ui.exportCsv.addEventListener('click', () => runExport(ui.exportCsv, () => {
+  setStatus(`Exported ${filename}. In the updated iOS app, choose Plot files & name → Open plot JSON.`);
+});
+ui.exportCsv.addEventListener('click', () => {
   const filename = exportName('-measurements.csv');
   downloadCsv(store.document, filename);
   setStatus(`Download requested: ${filename}.`);

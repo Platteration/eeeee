@@ -48,12 +48,108 @@
             <section class="panel-section"><h2>2 · Add a measured point</h2><p class="note">Walk around the rim in either direction. Add each point in that order.</p><div id="quick-entry"></div><button id="bulk-entry" type="button">Paste, scan or import a table</button></section>
             <section class="panel-section"><details><summary>Help &amp; advanced controls</summary><ul class="help"><li><b>Select</b> reviews a point. <b>Move</b> enables dragging points and A/B.</li><li>Changing A–B changes all drawing distances. Undo restores the previous scale.</li><li><b>Sketch points</b> adds approximate locations by tapping the plan.</li><li>Drag the background to pan. Pinch or use +/− to zoom.</li><li>Arrow keys nudge a selected point in Move mode. Escape returns to Select.</li><li>For exact offsets, open Points → Advanced coordinate table.</li></ul></details><p class="note"><a href="privacy.html" target="_blank" rel="noopener">Data &amp; privacy</a> · Save a project file before clearing browser data.</p></section>
           </div>
-          <div data-panel-content="points" hidden>
-            <section id="point-review" class="panel-section"></section>
-            <section class="panel-section"><div class="section-head"><h2>Point sequence</h2><button id="add" type="button">Add point</button></div><details id="coordinate-table"><summary>Advanced coordinate table</summary><div class="table-scroll"><table id="measurements"><thead></thead><tbody></tbody></table><p id="points-empty" class="note">No points yet.</p></div><p id="extent-note" class="note"></p><button id="clear" type="button" class="link-button">Clear all points</button></details></section>
+          <p class="note">Titles the drawing and names its exported files.</p>
+          <p id="save-status" class="status" role="status"></p>
+          <button id="retry-save" type="button" hidden>Retry save</button>
+          <button id="recovery" type="button" hidden>Download previous save for recovery</button>
+        </section>
+
+        <section class="panel-section">
+          <h2>Scale</h2>
+          <div class="field-row">
+            <label for="ab-distance">A–B distance</label>
+            <input id="ab-distance" type="number" min="0" step="0.01" inputmode="decimal" />
+            <select id="unit" aria-label="Unit">
+              <option value="meters">m</option>
+              <option value="feet">ft</option>
+            </select>
           </div>
-          <div data-panel-content="checks" hidden><section id="outline-review" class="panel-section"></section></div>
-        </div>
+          <p id="scale-note" class="note"></p>
+        </section>
+
+        <section class="panel-section panel-grow">
+          <div class="section-head">
+            <h2>Points</h2>
+            <div class="section-actions">
+              <button id="add" type="button" class="link-button">Add point</button>
+              <button id="clear" type="button" class="link-button">Clear all</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <!-- Head and body are both built in app.js: the columns depend on
+                 whether a point is selected to measure the others against. -->
+            <table id="measurements">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+            <p id="points-empty" class="note">No points yet.</p>
+          </div>
+          <p id="extent-note" class="note"></p>
+        </section>
+
+        <section class="panel-section">
+          <h2>File</h2>
+          <div class="button-grid">
+            <button id="import" type="button">Import JSON…</button>
+            <button id="export-json" type="button">Export JSON</button>
+            <button id="export-csv" type="button">Export CSV</button>
+            <button id="export-svg" type="button">Export SVG</button>
+            <button id="export-png" type="button">Export PNG</button>
+            <button id="reset" type="button">New plot</button>
+          </div>
+          <input id="file" type="file" accept="application/json,.json" hidden />
+          <div class="field-row">
+            <label for="sheet">Plan sheet</label>
+            <select id="sheet">
+              <option value="">Fit to content</option>
+              <option value="a4-landscape">A4 landscape</option>
+              <option value="a4-portrait">A4 portrait</option>
+              <option value="a3-landscape">A3 landscape</option>
+              <option value="a3-portrait">A3 portrait</option>
+              <option value="letter-landscape">Letter landscape</option>
+              <option value="letter-portrait">Letter portrait</option>
+              <option value="tabloid-landscape">Tabloid landscape</option>
+            </select>
+            <select id="plan-scale" aria-label="Drawing scale" disabled>
+              <option value="">Auto</option>
+              <option value="20">1:20</option>
+              <option value="50">1:50</option>
+              <option value="100">1:100</option>
+              <option value="200">1:200</option>
+              <option value="500">1:500</option>
+              <option value="1000">1:1000</option>
+            </select>
+          </div>
+          <p id="sheet-note" class="note"></p>
+          <label class="checkbox">
+            <input id="annotate" type="checkbox" />
+            Label points with their measurements on SVG and PNG exports
+          </label>
+          <p class="note">
+            Open exported JSON in the updated iOS app using Plot files &amp; name → Open plot JSON.
+            Names, points, and scale travel with the file. Import an app backup here to continue editing.
+          </p>
+          <p id="status" class="status" role="status"></p>
+        </section>
+
+        <section class="panel-section">
+          <h2>How it works</h2>
+          <ul class="help">
+            <li>Click empty canvas to add a point; click a point to select it, drag to move it.</li>
+            <li>No mouse? <b>Add point</b> drops one in the middle of the view, ready to be typed into place.</li>
+            <li>
+              Or type: the <b>Along</b> and <b>Perp.</b> cells are editable, so a distance off a tape
+              measure places a point exactly.
+            </li>
+            <li>Drag the green <b>A</b> and red <b>B</b> handles to set the baseline.</li>
+            <li>The declared A–B distance scales everything else — every measurement follows from it.</li>
+            <li>Drag with the background, middle button or <kbd>Shift</kbd> to pan; scroll to zoom.</li>
+            <li>
+              <kbd>←↑→↓</kbd> nudge the selection (<kbd>Shift</kbd> for a bigger step),
+              <kbd>Delete</kbd> removes it, <kbd>Esc</kbd> deselects.
+            </li>
+          </ul>
+        </section>
       </aside>
     </main>
     <dialog id="export-options" aria-labelledby="export-title"><div class="section-head"><h2 id="export-title">Export &amp; print</h2><button id="export-close" type="button">Close</button></div><p>Save project keeps your work editable. Choose an export for printing, sharing, or opening measurements on your iPhone.</p>

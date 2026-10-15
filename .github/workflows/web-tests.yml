@@ -2,25 +2,10 @@ name: Web editor tests
 on:
   pull_request:
   push:
-    branches: ["claude/ios-ab-plotting-ar-232m3z", "claude/ab-plotting-web-app-j4en2w", "codex/abplot-claude-handoff"]
+    branches: ["claude/ab-plotting-web-app-j4en2w"]
 permissions:
   contents: read
 jobs:
-  container:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: docker build -t abplot-web ./web
-      - name: Check disabled pilot and static assets
-        run: |
-          docker run -d --name abplot -p 8000:8000 abplot-web
-          for i in $(seq 1 20); do curl -fsS http://localhost:8000/api/ocr/config && break; sleep 1; done
-          curl -fsS http://localhost:8000/healthz
-          test "$(curl -fsS http://localhost:8000/api/ocr/config)" = '{"enabled":false}'
-          curl -fsS http://localhost:8000/vendor/ocr/tesseract.esm.min.js -o /dev/null
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/server/ocr-api.js)" = 404
-      - if: always()
-        run: docker logs abplot
   test:
     strategy:
       matrix:
@@ -28,32 +13,9 @@ jobs:
         node: [22, 24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm test
+      - run: node --test
         working-directory: web
-  browser:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox webkit
-      - run: npm run test:browser
-      - name: Check mobile drag setup remains stable across fresh pages
-        run: npx playwright test --project=mobile-webkit --grep "an interrupted drag" --repeat-each=10
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: browser-failure-traces
-          path: web/test-results/

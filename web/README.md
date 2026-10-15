@@ -71,9 +71,10 @@ column mapping stay in their own expandable sections.
 | Zoom / fit | Pinch, wheel, ±, or **Fit** |
 | Undo / redo | Header buttons or Ctrl/⌘+Z and Ctrl/⌘+Shift+Z |
 
-Select is the default. A tap on empty plan or photo space does not add or move a
-point unless an editing tool is selected. Photo and plan markers have generous
-hit areas while the visible dots remain compact.
+The plot autosaves to `localStorage`, so a reload picks up where you left off.
+The Plot panel shows save failures and offers Retry save. Export JSON for a
+backup that works across devices. If a previous save cannot be read, it stays
+untouched until you explicitly replace it; download its recovery copy first.
 
 Point UUIDs identify measurements and photo matches. Numbers/codes and optional
 descriptions identify them to people; renaming never changes a UUID, reading,
@@ -100,14 +101,10 @@ Notes and descriptions autosave as you type, but consecutive typing in one field
 is one project Undo step. Undo also restores remeasurement edits, reminders,
 sequence changes, and complete plot/photo replacements.
 
-Impossible A/B triangles block applying a measurement and explain which readings
-conflict with the baseline. Outline checks flag crossings, overlapping points,
-flat shapes and an explicitly requested walking direction that does not match.
-Check the sequence first, then remeasure if its order is right. **Earlier in
-sequence**, **Later in sequence**, and **Reverse sequence** change the walking
-order without moving measured points. Concave outlines are valid. These checks
-suggest candidates; they cannot prove which reading is wrong. Choose **Not a
-closed outline** for other kinds of plots.
+The declared A–B distance is the only real-world dimension you supply;
+everything else follows from it. Change it and every measurement rescales.
+Changing units converts the displayed distance: 2 m becomes about 6.562 ft.
+The physical scale and point positions stay unchanged, matching the updated iOS app.
 
 ### The A–B reference
 
@@ -117,10 +114,18 @@ handles changes the frame used to interpret the plan. Undo restores either chang
 Changing units converts the displayed distance while preserving physical scale
 and point positions: 2 m becomes about 6.562 ft.
 
-Along / Perp. offsets follow the direction A→B rather than the screen axes.
-Positive perpendicular is the right-hand side of A→B when facing B from A; that is
-the canvas-down side only while B is drawn to the right of A. Offsets cannot be edited
-as physical measurements until a positive A–B distance is set.
+- **Export JSON** writes the portable ABPlot format. In the updated iOS app,
+  choose **Plot files & name → Open plot JSON**, review it, and replace the
+  current plot. Use **Fit plot to screen** if the browser canvas was larger.
+  The app can save JSON back to Files without renaming files or relaunching.
+- **Import JSON** takes that file back, or anything close enough to it. Drop a
+  file anywhere on the page to import it.
+- **Export CSV** is the measurement table, in the document's unit.
+- **Export SVG / PNG** is a printable plan: gridded, with a scale bar and a
+  caption giving the A–B distance, the point count and the plot's extent. Tick
+  *Label points with their measurements* and every dot carries its own along
+  and across figures, so setting the plot out on site needs no second sheet to
+  cross-reference.
 
 ## Photos
 
@@ -257,11 +262,11 @@ either direction). The updated iOS model preserves these fields through file
 round trips; its native UI does not yet expose the new review/description tools.
 Older app versions may discard optional fields when saving.
 
-Ordinary plot imports also accept `{x,y}` coordinates. Invalid or duplicate IDs
-receive unique replacements while valid UUIDs are retained and normalized to
-uppercase. Distances must be JSON numbers. Open project accepts files up to 8 MB;
-measurement text imports accept files up to 1 MB and at most 100,000 characters
-(about 3,000 rows; 500 are applied per import).
+The optional `name` is retained by the updated iOS app. Older iOS versions
+ignore it. An unnamed plot omits the key. Imported IDs are normalized to
+uppercase UUIDs, with unique replacements for invalid or duplicate IDs, so
+every point remains editable and exports successfully to iOS. File uploads
+are limited to 5 MB; distances must be JSON numbers.
 
 Photo projects retain `format: "abplot-photo-project"`, `version: 1`, an ordinary
 `document`, and a `photo` with embedded PNG, dimensions, UUID/A/B-keyed pixel

@@ -55,9 +55,7 @@ export function abDistanceMeters(doc) {
 /** Convert the displayed distance without changing the physical plot. */
 export function changeUnit(doc, unit) {
   if (!Object.hasOwn(UNITS, unit)) throw new Error('Unknown length unit');
-  // Twelve significant digits: a feet -> meters -> feet round trip returns the typed number
-  // rather than 7.099999999999999 in the field and in exports.
-  const distance = Number((abDistanceMeters(doc) / UNITS[unit].toMeters).toPrecision(12));
+  const distance = abDistanceMeters(doc) / UNITS[unit].toMeters;
   if (!Number.isFinite(distance)) throw new Error('The converted distance is too large');
   doc.abDistance = distance;
   doc.unit = unit;
@@ -80,7 +78,7 @@ export function nextLabel(points) {
   // Only plain positive integers count, as in the iOS editor (Swift's Int("1e3") is nil),
   // so both apps suggest the same next number for the same plot.
   const highest = points.reduce((max, point) => {
-    const n = /^\d+$/.test(point.label) ? Number(point.label) : NaN;
+    const n = Number(point.label);
     return Number.isSafeInteger(n) && n > max ? n : max;
   }, 0);
   if (highest < Number.MAX_SAFE_INTEGER) return String(highest + 1);
@@ -151,8 +149,6 @@ export function parseDocument(input) {
     ids.add(id);
     return {
       id,
-      ...reviewFields(point),
-      ...(normalizePointDescription(point.description) ? { description: normalizePointDescription(point.description) } : {}),
       position: coercePoint(point.position, `points[${index}].position`),
       label: point.label === undefined || point.label === null ? String(index + 1) : String(point.label),
     };

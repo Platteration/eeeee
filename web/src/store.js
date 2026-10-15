@@ -32,18 +32,6 @@ export class Store {
   #recoveryText = null;
   #loadError = null;
   #hasSaved = false;
-  #expected = null;
-  #conflict = false;
-  #locks;
-  #saving = 0;
-  #queue = Promise.resolve();
-  #revision = 0;
-  #epoch = 0;
-  #photo = null;
-  #historyGroup = null;
-  #seq = 0;        // save requests issued so far
-  #storedSeq = 0;  // the request whose document, or a newer one, storage now holds
-  #dirty = false;  // the current document differs from what storage holds
 
   constructor({ document: doc = defaultDocument(), storage = null, locks = undefined } = {}) {
     validateGeometry(doc);
@@ -60,13 +48,7 @@ export class Store {
     const store = new Store({ storage, locks, document });
     let saved;
     try {
-      saved = storage?.getItem(STORAGE_KEY) ?? null;
-      store.#expected = saved;
-    } catch {
-      store.#saveError = 'Browser storage could not be read. Export JSON to keep your work.';
-      return store;
-    }
-    try {
+      const saved = storage?.getItem(STORAGE_KEY);
       if (saved) {
         store.#recoveryText = saved;
         store.#doc = parseDocument(saved);
@@ -80,82 +62,20 @@ export class Store {
   }
 
   get saveError() {
-    return this.#saveError ?? this.#loadError ?? (!this.#storage ? 'Browser storage is unavailable. Export JSON to keep your work.' : null);
-  }
-
-  /**
-   * Advice that stays visible beside the ordinary save status: autosave still
-   * writes without a lock manager, but two tabs saving at once are no longer
-   * serialised (only the last-read check in #save remains).
-   */
-  get saveWarning() {
-    return this.#storage && this.#locks === null ? 'Cross-tab conflict protection is off: this page is not a secure origin (HTTPS or localhost), so the browser lock manager is unavailable. Autosave still writes; edit this plot in one tab at a time.' : null;
-  }
-
-  get revision() { return this.#revision; }
-  get projectPhoto() { return this.#photo; }
-  get hasConflict() { return this.#conflict; }
-  get isSaving() { return this.#saving > 0; }
-  /**
-   * Whether closing the page now would lose edits: autosave is paused by a
-   * conflict, failed, unavailable, or still waiting for the lock manager.
-   */
-  get hasUnsavedChanges() { return this.#dirty; }
-  whenSaved() { return this.#queue; }
-
-  /**
-   * Best-effort synchronous write for pagehide / visibilitychange. A save
-   * queued behind the lock manager may never run in a page being discarded,
-   * so store the latest document directly, under the same last-read check.
-   * Writes still queued behind the lock are then superseded and skip: they
-   * were issued for this document or an older one, and an older one must
-   * never go back over what was just stored.
-   * Returns whether the latest document is now stored.
-   */
-  flush() {
-    if (this.#saving === 0 || !this.#storage || this.#conflict || this.#loadError) return false;
-    try {
-      if ((this.#storage.getItem(STORAGE_KEY) ?? null) !== this.#expected) return false;
-      const text = JSON.stringify(this.#doc);
-      if (text !== this.#expected) {
-        this.#storage.setItem(STORAGE_KEY, text);
-        this.#expected = text;
-        this.#hasSaved = true;
-        this.#saveError = null;
-      }
-      this.#storedSeq = this.#seq;
-      this.#dirty = false;
-      return true;
-    } catch { return false; }
-  }
-
-  loadLatest() {
-    const saved = this.#storage?.getItem(STORAGE_KEY) ?? null;
-    const doc = saved === null ? defaultDocument() : parseDocument(saved);
-    this.#epoch++;
-    this.#expected = saved;
-    this.#conflict = false;
-    this.#saveError = this.#loadError = this.#recoveryText = null;
-    this.#pending = null;
-    this.#photo = null; this.#historyGroup = null;
-    this.#undo = []; this.#redo = [];
-    this.#doc = doc; this.#selectedId = null; this.#revision++;
-    this.#hasSaved = saved !== null;
-    this.#storedSeq = this.#seq;
-    this.#dirty = false;
-    this.#changed(false);
+    return this.#loadError ?? this.#saveError ?? (!this.#storage ? 'Browser storage is unavailable. Export JSON to keep your work.' : null);
   }
 
   get recoveryText() { return this.#recoveryText; }
   get hasSaved() { return this.#hasSaved; }
-  get isEditing() { return this.#pending !== null; }
   get needsRecovery() { return this.#loadError !== null; }
 
   retrySaving(storage = this.#storage, { replaceUnreadable = false } = {}) {
     this.#storage = storage;
     // Never overwrite an unreadable autosave until the user has backed it up.
     if (this.#loadError && !replaceUnreadable) return;
-    return this.#save(replaceUnreadable);
+    this.#recoveryText = null;
+    this.#loadError = null;
+    this.#changed();
   }
 
   get document() {
@@ -298,53 +218,18 @@ export class Store {
 
   #changed(save = true) {
     if (save) this.#save();
-    for (const listener of this.#listeners) {
-      try { listener(this); } catch (error) { globalThis.reportError?.(error); }
-    }
+    for (const listener of this.#listeners) listener(this);
   }
 
-  #save(replaceUnreadable = false) {
-    const text = JSON.stringify(this.#doc);
-    this.#dirty = text !== this.#expected;
-    if (!this.#storage || this.#conflict || (this.#loadError && !replaceUnreadable)) return;
-    const epoch = this.#epoch, seq = ++this.#seq;
-    const persist = () => {
-      if (epoch !== this.#epoch || this.#conflict) return;
-      // The unload flush, or a later request, already stored this document or a newer one.
-      if (seq <= this.#storedSeq) return;
-      try {
-        if ((this.#storage.getItem(STORAGE_KEY) ?? null) !== this.#expected) {
-          this.#conflict = true;
-          this.#saveError = 'Another tab saved a different plot. Autosave paused. Download your version or load the latest save.';
-          return;
-        }
-        this.#storage.setItem(STORAGE_KEY, text);
-        this.#expected = text;
-        this.#storedSeq = seq;
-        this.#hasSaved = true;
-        this.#saveError = null;
-        this.#dirty = JSON.stringify(this.#doc) !== text;
-        if (replaceUnreadable) {
-          this.#loadError = null; this.#recoveryText = null;
-          // Edits made while the recovery write waited for its lock were kept
-          // in memory. Queue them now that the old corrupt save is replaced.
-          if (JSON.stringify(this.#doc) !== text) this.#save();
-        }
-      } catch {
-        this.#saveError = 'Could not autosave. Your latest changes are only in memory. Retry saving or export JSON.';
-      } finally { this.#changed(false); }
-    };
-    // Undefined is the synchronous test/non-browser adapter. Null is a browser
-    // without a lock manager: navigator.locks exists only in secure contexts,
-    // so plain http:// from a phone on the LAN has none. Write directly rather
-    // than not at all (see saveWarning); the last-read check in persist still
-    // catches a save another tab finished before this one started.
-    if (this.#locks === undefined || this.#locks === null) return persist();
-    this.#saving++;
-    this.#queue = this.#queue.then(() => this.#locks.request(STORAGE_KEY, persist)).catch(() => {
-      this.#saveError = 'Could not acquire the save lock. Retry saving or export JSON.';
-    }).finally(() => { this.#saving--; this.#changed(false); });
-    return this.#queue;
+  #save() {
+    if (!this.#storage || this.#loadError) return;
+    try {
+      this.#storage.setItem(STORAGE_KEY, JSON.stringify(this.#doc));
+      this.#hasSaved = true;
+      this.#saveError = null;
+    } catch (error) {
+      this.#saveError = 'Could not autosave. Your latest changes are only in memory. Retry saving or export JSON.';
+    }
   }
 }
 
