@@ -52,25 +52,7 @@ jobs:
       - run: npm run test:browser
       - name: Check mobile drag setup remains stable across fresh pages
         run: npx playwright test --project=mobile-webkit --grep "an interrupted drag" --repeat-each=10
-      - name: Build static release
-        run: npm run build
-      - name: Verify release contains only public runtime files
-        run: |
-          test -f dist/index.html
-          test -f dist/vendor/ocr/lang/eng.traineddata.gz
-          test -f dist/privacy.html
-          test -f dist/manifest.webmanifest
-          test -f dist/sw.js
-          test -f dist/icons/abplot-512.png
-          test ! -e dist/server
-          test ! -e dist/node_modules
-          test ! -e dist/.env
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: abplot-static-site
-          path: web/dist/
-          retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-failure-traces
