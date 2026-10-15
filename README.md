@@ -23,26 +23,11 @@ see [RELEASE.md](RELEASE.md).
 - Enter the real-world A–B distance and pick meters or feet in the bottom bar.
   This distance defines the scale of the whole plot.
 - The plot autosaves and is restored on relaunch.
-  In-progress drags also save when the app becomes inactive. If a save fails,
-  an editor message stays visible with **Retry save** until saving succeeds.
 - Switching between meters and feet converts the distance, preserving the
   real-world scale. Use **Done** above the decimal keyboard to finish editing.
 - The editor explains what is needed before entering AR: a positive distance,
   separated A/B handles, and at least one plotted point.
 - **Clear all points** asks for confirmation and keeps A, B, and the distance.
-- Use **Plot options → Fit plot to screen** to bring A, B, and all plotted
-  points into view after opening a plot on a smaller screen. This preserves
-  proportions and the declared distance, autosaves, and supports Undo.
-- Points and reference handles have larger touch targets; new points and drags
-  stay inset from the canvas edges so their handles remain reachable.
-- Dragging preserves where you grabbed a handle, without snapping its center
-  to your finger. Tap a plotted point to see its distances from A and B in the
-  selected unit; these update as you move the selected point or either reference.
-- **Undo** and **Redo** recover point additions, deletions, whole drags, clearing,
-  distance/unit edits, and naming (a typed name is one step). External keyboards
-  support Command-Z and Shift-Command-Z. The last 100 edits are available during
-  the current session; the restored plot autosaves, but history starts fresh on
-  relaunch.
 
 ### Scan measurement tables (OCR)
 - Choose **Plot options → Scan measurements**, then take a photo or select an

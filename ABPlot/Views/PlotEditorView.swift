@@ -5,12 +5,6 @@ struct PlotEditorView: View {
     @EnvironmentObject private var viewModel: PlotViewModel
     @FocusState private var distanceFieldFocused: Bool
     @State private var showingClearConfirmation = false
-    @State private var canvasSize: CGSize = .zero
-    @State private var showingExport = false
-    @State private var exportFile = PlotCSVFile(text: "")
-    @State private var exportError: String?
-    @State private var showingMeasurementImport = false
-    @State private var showingPlotFiles = false
 
     private static let canvasSpace = "canvas"
 
@@ -46,48 +40,7 @@ struct PlotEditorView: View {
             .onChange(of: geo.size) { canvasSize = $0 }
         }
         .safeAreaInset(edge: .bottom) { bottomBar }
-        .sheet(isPresented: $showingPlotFiles) { PlotFilesView(initialName: viewModel.doc.name) }
-        .sheet(isPresented: $showingMeasurementImport) {
-            MeasurementImportView(canvasSize: canvasSize,
-                                  initialDistance: viewModel.doc.abDistance, initialUnit: viewModel.doc.unit) {
-                viewModel.replaceMeasurements(with: $0)
-            }
-        }
-        .fileExporter(isPresented: $showingExport, document: exportFile,
-                      contentType: .commaSeparatedText, defaultFilename: "ABPlot-coordinates") { result in
-            if case .failure(let error) = result {
-                if let error = error as? CocoaError, error.code == .userCancelled { return }
-                exportError = error.localizedDescription
-            }
-        }
-        .alert("Could not export coordinates", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
-        )) {
-            Button("OK", role: .cancel) { exportError = nil }
-        } message: {
-            Text(exportError ?? "Please try again.")
-        }
         .toolbar {
-            ToolbarItemGroup(placement: .navigationBarLeading) {
-                Button {
-                    distanceFieldFocused = false
-                    viewModel.undo()
-                } label: {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
-                }
-                .disabled(!viewModel.canUndo)
-                .keyboardShortcut("z", modifiers: .command)
-
-                Button {
-                    distanceFieldFocused = false
-                    viewModel.redo()
-                } label: {
-                    Label("Redo", systemImage: "arrow.uturn.forward")
-                }
-                .disabled(!viewModel.canRedo)
-                .keyboardShortcut("z", modifiers: [.command, .shift])
-            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") { distanceFieldFocused = false }
@@ -99,7 +52,7 @@ struct PlotEditorView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("A, B, and your distance will be kept. Use Undo to restore cleared points.")
+            Text("This cannot be undone. A, B, and your distance will be kept.")
         }
     }
 
@@ -226,37 +179,6 @@ struct PlotEditorView: View {
                 }
 
                 Menu {
-                    Button {
-                        distanceFieldFocused = false
-                        showingPlotFiles = true
-                    } label: {
-                        Label("Plot files & name", systemImage: "folder")
-                    }
-                    Button {
-                        distanceFieldFocused = false
-                        showingMeasurementImport = true
-                    } label: {
-                        Label("Scan measurements", systemImage: "text.viewfinder")
-                    }
-                    Button {
-                        distanceFieldFocused = false
-                        do {
-                            exportFile = PlotCSVFile(text: try PlotCSV.string(for: viewModel.doc))
-                            showingExport = true
-                        } catch {
-                            exportError = error.localizedDescription
-                        }
-                    } label: {
-                        Label("Export coordinates (CSV)", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(!viewModel.canEnterAR)
-                    Button {
-                        distanceFieldFocused = false
-                        viewModel.fitPlot(in: canvasSize)
-                    } label: {
-                        Label("Fit plot to screen", systemImage: "arrow.up.left.and.arrow.down.right")
-                    }
-                    .disabled(canvasSize.width <= 56 || canvasSize.height <= 56)
                     Button("Clear all points", role: .destructive) {
                         distanceFieldFocused = false
                         showingClearConfirmation = true
@@ -267,8 +189,6 @@ struct PlotEditorView: View {
                 }
                 .accessibilityLabel("Plot options")
             }
-
-            selectedPointDetails
 
             Text(viewModel.arUnavailableReason ?? "Tap to add a point · drag points, A, or B to move them")
                 .font(.caption2)

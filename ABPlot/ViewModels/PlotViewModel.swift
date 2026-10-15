@@ -88,13 +88,6 @@ final class PlotViewModel: ObservableObject {
         guard dx * dx + dy * dy > PlotMath.minCanvasABDistance * PlotMath.minCanvasABDistance else {
             return "Move A and B farther apart."
         }
-        for point in doc.points {
-            guard let coordinate = PlotMath.abCoordinates(of: point.position, a: doc.pointA, b: doc.pointB),
-                  Float(coordinate.s * doc.abDistanceMeters).isFinite,
-                  Float(coordinate.t * doc.abDistanceMeters).isFinite else {
-                return "Some point coordinates are too large for AR. Check the plot measurements."
-            }
-        }
         return doc.points.isEmpty ? "Tap the canvas to add your first point." : nil
     }
 
@@ -233,7 +226,7 @@ final class PlotViewModel: ObservableObject {
     }
 
     func setDistance(_ distance: Double) {
-        guard distance.isFinite, distance >= 0 else { return }
+        guard distance.isFinite else { return }
         doc.abDistance = distance
         save()
     }
@@ -242,10 +235,7 @@ final class PlotViewModel: ObservableObject {
         guard unit != doc.unit else { return }
         let convertedDistance = doc.abDistanceMeters / unit.toMeters
         guard convertedDistance.isFinite else { return }
-        // Twelve significant digits, as the web editor rounds: a feet → meters → feet
-        // round trip returns the typed number rather than 7.099999999999999, which
-        // would otherwise be written to plot.json, the CSV and the scan sheet.
-        doc.abDistance = Double(String(format: "%.12g", convertedDistance)) ?? convertedDistance
+        doc.abDistance = convertedDistance
         doc.unit = unit
         save()
     }
